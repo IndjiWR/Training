@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { formatClock } from '../../lib/format'
-import type { ParsedMedia, YouTubeMedia } from '../../lib/media'
+import { forgetCachedImage, type ParsedMedia, type YouTubeMedia } from '../../lib/media'
 import { IconExternal, IconPlay, IconWarning } from '../icons'
 import { useOnline } from './hooks'
 import './media.css'
@@ -72,7 +72,12 @@ export function MediaImage({ url, alt, large = false }: { url: string; alt: stri
           </p>
           {online && (
             <div className="row">
-              <button type="button" className="btn btn--outline" onClick={() => setFailed(null)}>
+              <button
+                type="button"
+                className="btn btn--outline"
+                // Purge first: the remounted <img> must not get the same cached error back.
+                onClick={() => void forgetCachedImage(url).then(() => setFailed(null))}
+              >
                 Riprova
               </button>
               <a className="btn btn--ghost" href={url} target="_blank" rel="noopener noreferrer">
@@ -93,7 +98,11 @@ export function MediaImage({ url, alt, large = false }: { url: string; alt: stri
       loading="lazy"
       decoding="async"
       referrerPolicy="no-referrer"
-      onError={() => setFailed(attempt)}
+      onError={() => {
+        // A broken response cached by the service worker would be served again on every retry.
+        if (online) void forgetCachedImage(url)
+        setFailed(attempt)
+      }}
     />
   )
 }

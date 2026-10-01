@@ -49,9 +49,13 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Pinned exercise images/GIFs from other origins: keep them for offline use at the park.
+            // CacheFirst keeps a good copy offline. The <img> loads are no-cors, so status 0 (opaque)
+            // must be cacheable, and an opaque *error* can get cached too: MediaImage deletes the
+            // entry when an image fails while online and on "Riprova", so it is fetched again.
             urlPattern: ({ request, sameOrigin }) => request.destination === 'image' && !sameOrigin,
             handler: 'CacheFirst',
             options: {
+              // Must match the cache name purged in src/components/media/MediaView.tsx.
               cacheName: 'pinned-images',
               expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 120 },
               cacheableResponse: { statuses: [0, 200] },

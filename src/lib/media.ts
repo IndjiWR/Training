@@ -50,13 +50,35 @@ export const MEDIA_REASONS = {
 
 const invalid = (reason: string): ParsedMedia => ({ type: 'invalid', reason })
 
+const LEADING_WRAP = /^[(<[«“‘"']+/
+const TRAILING_PUNCT = /[.,;:!?'"»”’)\]>]$/
+
+function count(s: string, ch: string): number {
+  return s.split(ch).length - 1
+}
+
+/**
+ * "(https://youtu.be/ID)", "https://youtu.be/ID?t=30," -> the bare link. A closing ")" or "]"
+ * that balances one inside the URL is kept ("https://example.com/File_(1)").
+ */
+function trimLinkPunctuation(s: string): string {
+  let out = s.replace(LEADING_WRAP, '')
+  while (TRAILING_PUNCT.test(out)) {
+    const last = out[out.length - 1]
+    if (last === ')' && count(out, '(') >= count(out, ')')) break
+    if (last === ']' && count(out, '[') >= count(out, ']')) break
+    out = out.slice(0, -1)
+  }
+  return out
+}
+
 /** Text pasted from a share sheet may contain a title before the link: keep the URL only. */
 function extractCandidate(raw: string): string | null {
   const text = raw.trim()
   if (!text) return null
-  if (!/\s/.test(text)) return text
-  const found = /https?:\/\/\S+/i.exec(text)
-  return found ? found[0] : null
+  const token = /\s/.test(text) ? (/https?:\/\/\S+/i.exec(text)?.[0] ?? null) : text
+  if (!token) return null
+  return trimLinkPunctuation(token) || null
 }
 
 function toUrl(candidate: string): URL | null {
@@ -187,6 +209,31 @@ export function canonicalMediaUrl(media: ParsedMedia): string | null {
   if (media.type === 'youtube') return media.watchUrl
   if (media.type === 'image') return media.url
   return null
+}
+
+/** Must match the workbox runtimeCaching `cacheName` of pinned images in vite.config.ts. */
+export const PINNED_IMAGES_CACHE = 'pinned-images'
+
+/**
+ * Drops a pinned image from the service-worker cache. Pinned images are cached CacheFirst as
+ * opaque responses, so a 404/429/5xx (or a captive-portal page) cached once would be served
+ * forever: call this when an image fails to load while online, before retrying.
+ * Never rejects; a no-op where Cache Storage is unavailable.
+ */
+export function forgetCachedImage(url: string): Promise<void> {
+  try {
+    if (typeof caches === 'undefined') return Promise.resolve()
+    return caches
+      .open(PINNED_IMAGES_CACHE)
+      .then((cache) => cache.delete(url, { ignoreVary: true }))
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+  } catch {
+    // Accessing `caches` throws in sandboxed/opaque-origin contexts.
+    return Promise.resolve()
+  }
 }
 
 /** True when the URL path ends with a known image/GIF extension (query string ignored). */
