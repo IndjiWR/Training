@@ -118,6 +118,9 @@ export interface LatestResult {
   value: number
   date: string
   index: number
+  /** per_side log: best of each side (null when that side has no value, or the log is not per_side). */
+  dx: number | null
+  sx: number | null
 }
 
 /** Kinds whose sets are results (a max test or the best of several attempts). */
@@ -126,7 +129,8 @@ const RESULT_KINDS: ReadonlySet<ExerciseLog['kind']> = new Set(['max', 'attempts
 /**
  * Latest result recorded for `key`: scans every session (any plan), considering only
  * exercise logs with that key and kind 'max' or 'attempts' that have at least one recorded
- * value. "Latest" = greatest (date, index). The result value is that log's bestResult().best.
+ * value. "Latest" = greatest (date, index). The result value is that log's bestResult().best
+ * (per_side: the best side), with the per-side bests in dx/sx.
  * `before` (optional) excludes logs at or after that position — used so an exercise never
  * reads its own result and only results recorded earlier (same day earlier index, or an earlier
  * date) count.
@@ -146,12 +150,19 @@ export function latestResult(
       if (!log || log.key !== key || !RESULT_KINDS.has(log.kind)) continue
       if (before && date === before.date && log.index >= before.index) continue
       if (latest && date === latest.date && log.index <= latest.index) continue
-      const { best } = bestResult(log)
+      const { best, dx, sx } = bestResult(log)
       if (best == null) continue
-      latest = { value: best, date, index: log.index }
+      latest = { value: best, date, index: log.index, dx, sx }
     }
   }
   return latest
+}
+
+/** Reps for target_min% and target_max% of `base`. */
+export interface PercentRange {
+  min: number
+  max: number
+  base: number
 }
 
 export interface PercentMaxTarget {
@@ -163,6 +174,12 @@ export interface PercentMaxTarget {
   baseDate: string
   pctMin: number
   pctMax: number
+  /**
+   * per_side exercise whose latest max was recorded per side: the target of each side from its own
+   * max (a side without any value uses the overall best). min/max/base above are then the
+   * weaker side's, so a reader that ignores `sides` never overloads the weaker side. Null otherwise.
+   */
+  sides: Record<'dx' | 'sx', PercentRange> | null
 }
 
 /** round(pct/100 × base), half up. Multiplies first so integer inputs round exactly (70% of 15 -> 11). */
@@ -175,6 +192,7 @@ export function percentOf(pct: number, base: number): number {
  * using latestResult(sessions, ex.key, { date, index }). target_min/target_max are the
  * percentages (one may be null: use the other). Returns null when the exercise is not %max,
  * has no percentage, or there is no positive latest result -> the UI shows ex.dose text instead.
+ * per_side: see PercentMaxTarget.sides.
  */
 export function resolvePercentMax(
   ex: Exercise,
@@ -189,12 +207,13 @@ export function resolvePercentMax(
   if (!latest || !(latest.value > 0)) return null
   const pctMin = Math.min(a, b)
   const pctMax = Math.max(a, b)
-  return {
-    min: percentOf(pctMin, latest.value),
-    max: percentOf(pctMax, latest.value),
-    base: latest.value,
-    baseDate: latest.date,
-    pctMin,
-    pctMax,
-  }
+  const range = (base: number): PercentRange => ({ min: percentOf(pctMin, base), max: percentOf(pctMax, base), base })
+  // A side never recorded uses the overall best; a recorded 0 stays 0 (no reps for that side).
+  const sideBase = (v: number | null) => v ?? latest.value
+  const sides =
+    ex.per_side && (latest.dx != null || latest.sx != null)
+      ? { dx: range(sideBase(latest.dx)), sx: range(sideBase(latest.sx)) }
+      : null
+  const main = sides ? (sides.sx.base < sides.dx.base ? sides.sx : sides.dx) : range(latest.value)
+  return { ...main, baseDate: latest.date, pctMin, pctMax, sides }
 }

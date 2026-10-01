@@ -148,7 +148,7 @@ describe('computeWeekSummary — planned sets on the fixture', () => {
     expect(s.sessions.map((x) => [x.date, x.type, x.setsPlanned, x.status])).toEqual([
       ['2026-10-01', 'SPINTA', 27, 'planned'],
       ['2026-10-02', 'TIRATA', 25, 'planned'],
-      ['2026-10-03', 'GAMBE', 19, 'planned'],
+      ['2026-10-03', 'GAMBE', 18, 'planned'],
       ['2026-10-04', 'RIPOSO', 0, 'rest'],
     ])
     expect(s.counts).toEqual({ done: 0, partial: 0, skipped: 0, planned: 3 })
@@ -178,7 +178,7 @@ describe('computeWeekSummary — status', () => {
     const s = summaryOf(byDate(spintaDone, tirataPartial), '2026-10-04')
     expect(sessionOf(s, '2026-10-01')).toMatchObject({ status: 'done', setsDone: 27, setsPlanned: 27, rpe: 7, elbowDuring: 2 })
     expect(sessionOf(s, '2026-10-02')).toMatchObject({ status: 'partial', setsDone: 7, setsPlanned: 19, elbowPre: 4 })
-    expect(sessionOf(s, '2026-10-03')).toMatchObject({ status: 'skipped', setsDone: 0, setsPlanned: 19 })
+    expect(sessionOf(s, '2026-10-03')).toMatchObject({ status: 'skipped', setsDone: 0, setsPlanned: 18 })
     expect(sessionOf(s, '2026-10-04')).toMatchObject({ status: 'rest', setsPlanned: 0, weekday: 'Domenica' })
     expect(s.counts).toEqual({ done: 1, partial: 1, skipped: 1, planned: 0 })
   })
@@ -198,10 +198,12 @@ describe('computeWeekSummary — status', () => {
     expect(sessionOf(summaryOf(byDate(emptySession(GAMBE)), '2026-10-03'), '2026-10-03').status).toBe('planned')
   })
 
-  it('session.skipped wins, even on a future day or with sets done', () => {
+  it('session.skipped wins over the date, but not over sets done', () => {
     const s = summaryOf(byDate({ ...spintaDone, skipped: true }, emptySession(GAMBE, { skipped: true })), '2026-09-30')
-    expect(sessionOf(s, '2026-10-01').status).toBe('skipped')
+    expect(sessionOf(s, '2026-10-01')).toMatchObject({ status: 'done', setsDone: 27, setsPlanned: 27 })
     expect(sessionOf(s, '2026-10-03').status).toBe('skipped')
+    const half = { ...emptySession(SPINTA, { skipped: true }), exercises: { '0': spintaDone.exercises['0'] } }
+    expect(sessionOf(summaryOf(byDate(half), '2026-10-04'), '2026-10-01')).toMatchObject({ status: 'partial', setsDone: 1 })
   })
 
   it('a yellow TIRATA with every visible set done is done (19/19)', () => {
@@ -214,6 +216,76 @@ describe('computeWeekSummary — status', () => {
     const extra = fullSession(TIRATA, { elbowPre: 1 }, { 3: [done(4), done(5), done(6), done(7)] })
     const s = summaryOf(byDate(extra), '2026-10-04')
     expect(sessionOf(s, '2026-10-02')).toMatchObject({ status: 'done', setsDone: 26, setsPlanned: 25 })
+  })
+
+  it('sets of exercises hidden by a later elbow change do not count', () => {
+    for (const patch of [{ elbowPre: 2, elbowOverride: 'red' as const }, { elbowPre: 7 }]) {
+      const s = emptySession(TIRATA, patch)
+      s.exercises['0'] = logOf(TIRATA, 0, [done(2)])
+      s.exercises['1'] = logOf(TIRATA, 1, [done(30), done(30), done(30)])
+      s.exercises['2'] = logOf(TIRATA, 2, [done(300)])
+      s.exercises['3'] = logOf(TIRATA, 3, [done(4), done(5), done(6)])
+      s.exercises['4'] = logOf(TIRATA, 4, [done(4), done(5), done(6)])
+      s.exercises['5'] = logOf(TIRATA, 5, [done(3), done(3), done(3), done(3)])
+      const sum = summaryOf(byDate(s), '2026-10-04')
+      expect(sessionOf(sum, '2026-10-02')).toMatchObject({ status: 'partial', setsDone: 5, setsPlanned: 15, setsHiddenDone: 10 })
+      expect(formatWeekSummary(sum)).toMatch(/ven 2\/10 .*parziale · serie 5\/15 \+ 10 nascoste per il gomito/)
+    }
+  })
+
+  it('work done only on exercises hidden afterwards is partial, not skipped', () => {
+    const s = emptySession(TIRATA, { elbowPre: 2, elbowOverride: 'red' })
+    s.exercises['5'] = logOf(TIRATA, 5, [done(3), done(3)])
+    // The elbow check is settled (score given): 1 of 15.
+    expect(sessionOf(summaryOf(byDate(s), '2026-10-04'), '2026-10-02')).toMatchObject({
+      status: 'partial',
+      setsDone: 1,
+      setsPlanned: 15,
+      setsHiddenDone: 2,
+    })
+  })
+
+  it('optional exercises (block "Opzionale") are outside the planned sets', () => {
+    expect(GAMBE.exercises[8]).toMatchObject({ key: 'camminata-salita', block: 'Opzionale' })
+    const noWalk = { ...gambeDone, exercises: { ...gambeDone.exercises } }
+    delete noWalk.exercises['8']
+    const s = summaryOf(byDate(noWalk), '2026-10-04')
+    expect(sessionOf(s, '2026-10-03')).toMatchObject({ status: 'done', setsDone: 18, setsPlanned: 18, setsOptionalDone: 0 })
+    expect(formatWeekSummary(s)).toMatch(/sab 3\/10 · GAMBE — fatta · serie 18\/18(\n| ·)/)
+    const withWalk = summaryOf(byDate(gambeDone), '2026-10-04')
+    expect(sessionOf(withWalk, '2026-10-03')).toMatchObject({ status: 'done', setsDone: 18, setsPlanned: 18, setsOptionalDone: 1 })
+    const onlyWalk = { ...emptySession(GAMBE), exercises: { '8': gambeDone.exercises['8'] } }
+    expect(sessionOf(summaryOf(byDate(onlyWalk), '2026-10-04'), '2026-10-03')).toMatchObject({
+      status: 'partial',
+      setsDone: 0,
+      setsOptionalDone: 1,
+    })
+  })
+
+  it('a tracked exercise with sets null counts 1 planned set', () => {
+    const pike = 7
+    expect(SPINTA.exercises[pike]).toMatchObject({ kind: 'reps', sets: 3 })
+    const days = plan.days.map((d) =>
+      d.date === SPINTA.date ? { ...d, exercises: d.exercises.map((e, i) => (i === pike ? { ...e, sets: null } : e)) } : d,
+    )
+    const r = computeWeekSummary({ plan: { ...plan, days }, sessions: {}, days: {}, today: '2026-09-30' })
+    expect(sessionOf(r, '2026-10-01').setsPlanned).toBe(27 - 3 + 1)
+  })
+
+  it('a manual traffic light without a score settles the elbow check', () => {
+    const noCheck = (patch: Partial<SessionLog>) => {
+      const s = fullSession(TIRATA, patch)
+      delete s.exercises['0']
+      return sessionOf(summaryOf(byDate(s), '2026-10-04'), '2026-10-02')
+    }
+    expect(noCheck({ elbowOverride: 'green' })).toMatchObject({ status: 'done', setsDone: 25, setsPlanned: 25 })
+    // Gate still pending (no score, no colour): the check is a planned set not done.
+    expect(noCheck({})).toMatchObject({ status: 'partial', setsDone: 24, setsPlanned: 25 })
+    // The check set stored as done without a value (manual colour) counts once and has no result.
+    const stored = fullSession(TIRATA, { elbowOverride: 'yellow' }, { 0: [done(null)] })
+    const r = summaryOf(byDate(stored), '2026-10-04')
+    expect(sessionOf(r, '2026-10-02')).toMatchObject({ status: 'done', setsDone: 19, setsPlanned: 19 })
+    expect(r.tests.find((t) => t.key === 'check-gomito')).toMatchObject({ value: null, recorded: false })
   })
 })
 
@@ -239,9 +311,9 @@ describe('computeWeekSummary — tests, elbow, weight, sleep, notes', () => {
     expect(salto).toMatchObject({ value: 210, unit: 'cm', values: [200, 210, 205] })
     expect(pistol).toMatchObject({ value: null, dx: 5, sx: 4, unit: 'rep', values: [5, 4], recorded: true })
     expect(s.tests.map((t) => t.label)).toEqual([
-      'Verticale al muro',
+      'Verticale al muro (petto verso il muro)',
       'Verticale libera',
-      'Dip alle parallele',
+      'Dip massimali alle parallele',
       'Check gomito (sospensione attiva 10")',
       'Front lever',
       'Salto in lungo da fermo',
@@ -249,12 +321,28 @@ describe('computeWeekSummary — tests, elbow, weight, sleep, notes', () => {
     ])
   })
 
-  it('falls back to the exercise name without a library entry', () => {
+  it('labels: check-gomito falls back to the exercise name, a blank head to the library label', () => {
     const library = { ...plan.library }
-    delete library['salto-in-lungo']
-    const r = computeWeekSummary({ plan: { ...plan, library }, sessions: byDate(gambeDone), days: {}, today: '2026-10-04' })
-    const salto = r.tests.find((t) => t.key === 'salto-in-lungo')
-    expect(salto).toMatchObject({ label: GAMBE.exercises[1].name, value: 210, unit: 'cm' })
+    delete library['check-gomito']
+    const r = computeWeekSummary({ plan: { ...plan, library }, sessions: {}, days: {}, today: '2026-10-04' })
+    expect(r.tests.find((t) => t.key === 'check-gomito')?.label).toBe(TIRATA.exercises[0].name)
+    const days = plan.days.map((d) =>
+      d.date === GAMBE.date ? { ...d, exercises: d.exercises.map((e, i) => (i === 1 ? { ...e, name: ': migliore di 3' } : e)) } : d,
+    )
+    const blank = computeWeekSummary({ plan: { ...plan, days }, sessions: {}, days: {}, today: '2026-10-04' })
+    expect(blank.tests.find((t) => t.key === 'salto-in-lungo')?.label).toBe('Salto in lungo da fermo')
+  })
+
+  it('labels shared by two tests of the week get their date', () => {
+    const days = plan.days.map((d) =>
+      d.date === GAMBE.date ? { ...d, exercises: d.exercises.map((e, i) => (i === 7 ? { ...e, test: true } : e)) } : d,
+    )
+    const r = computeWeekSummary({ plan: { ...plan, days }, sessions: {}, days: {}, today: '2026-10-04' })
+    expect(r.tests.filter((t) => t.key === 'verticale-libera').map((t) => t.label)).toEqual([
+      'Verticale libera · gio 1/10',
+      'Verticale libera · sab 3/10',
+    ])
+    expect(r.tests.find((t) => t.key === 'dip')?.label).toBe('Dip massimali alle parallele')
   })
 
   it('reads units from the log copy when the plan has changed', () => {
@@ -348,13 +436,14 @@ describe('formatWeekSummary', () => {
   it('lists the sessions with status and sets', () => {
     expect(text).toMatch(/• gio 1\/10 .*SPINTA.*fatta.*serie 27\/27/)
     expect(text).toMatch(/• ven 2\/10 .*TIRATA.*parziale.*serie 7\/19/)
-    expect(text).toMatch(/• sab 3\/10 .*GAMBE.*fatta.*serie 19\/19/)
+    expect(text).toMatch(/• sab 3\/10 .*GAMBE.*fatta.*serie 18\/18 \+ 1 opzionale/)
     expect(text).toMatch(/• dom 4\/10 .*riposo/)
     expect(text).toContain('RPE 7')
   })
 
   it('lists the test results with units', () => {
-    expect(text).toContain('• Dip alle parallele — 20 rip')
+    expect(text).toContain('• Dip massimali alle parallele — 20 rip')
+    expect(text).toContain('• Verticale al muro (petto verso il muro) — 35 s')
     expect(text).toContain('• Salto in lungo da fermo — 210 cm (migliore di 3: 200 / 210 / 205)')
     expect(text).toContain('• Front lever — adv tuck · 6 s (migliore di 2: 4 / 6)')
     expect(text).toContain('• Pistol squat — dx 5 rip · sx 4 rip')
@@ -391,12 +480,12 @@ describe('formatWeekSummary', () => {
   it('says skipped / planned in Italian', () => {
     const t = formatWeekSummary(summaryOf(byDate(spintaDone), '2026-10-03'))
     expect(t).toMatch(/ven 2\/10 .*saltata.*serie 0\/25/)
-    expect(t).toMatch(/sab 3\/10 .*da fare.*serie 0\/19/)
+    expect(t).toMatch(/sab 3\/10 .*da fare.*serie 0\/18/)
   })
 
   it('writes n.d. / nessuna when data is missing', () => {
     const t = formatWeekSummary(summaryOf({}, '2026-10-01', {}))
-    expect(t).toContain('• Verticale al muro — n.d.')
+    expect(t).toContain('• Verticale al muro (petto verso il muro) — n.d.')
     expect(t).toMatch(/GOMITO\n• Voto massimo: n\.d\./)
     expect(t).toMatch(/NOTE\n• nessuna/)
     expect(t).toMatch(/Peso medio: n\.d\./)

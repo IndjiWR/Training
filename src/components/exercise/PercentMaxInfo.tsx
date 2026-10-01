@@ -26,8 +26,23 @@ export interface PercentMaxInfoProps {
   unit: string
 }
 
-/** "60% del max (20 rip, gio 1/10) = 12 rip", or the plan text + hint when no max exists yet. */
+/**
+ * "60% del max (20 rip, gio 1/10) = 12 rip" (per side when the sides differ: "60% del max
+ * (dx 10 · sx 5 rip, sab 3/10) = dx 6 · sx 3 rip"), or the plan text + hint when no max exists yet.
+ */
 export function PercentMaxInfo({ ex, pm, unit }: PercentMaxInfoProps) {
+  const sides = pm?.sides && pm.sides.dx.base !== pm.sides.sx.base ? pm.sides : null
+  if (pm && sides) {
+    return (
+      <p className="ex-target">
+        {span(pm.pctMin, pm.pctMax, '%')} del max (dx {formatNumberIt(sides.dx.base)} · sx{' '}
+        {formatNumberIt(sides.sx.base)} {unit}, {formatShortDate(pm.baseDate)}) ={' '}
+        <strong className="num">
+          dx {span(sides.dx.min, sides.dx.max)} · sx {span(sides.sx.min, sides.sx.max)} {unit}
+        </strong>
+      </p>
+    )
+  }
   if (pm) {
     return (
       <p className="ex-target">

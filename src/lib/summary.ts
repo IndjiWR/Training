@@ -1,7 +1,17 @@
-import type { Day, DayType, Exercise, Plan } from '../plan/schema'
+import type { Day, DayType, Exercise, LibraryEntry, Plan } from '../plan/schema'
 import type { DayLog, ElbowLevel, ExerciseLog, SessionLog } from '../state/types'
 import { formatShortDate } from './date'
-import { applyElbow, CHECK_KEY, elbowLevel, levelEmoji, levelLabel, libraryEntry, sessionElbowLevel } from './elbow'
+import {
+  applyElbow,
+  CHECK_KEY,
+  elbowLevel,
+  isOptional,
+  levelEmoji,
+  levelLabel,
+  libraryEntry,
+  plannedSetCount,
+  sessionElbowLevel,
+} from './elbow'
 import { formatNumberIt, formatValue } from './format'
 import { bestResult, recordedValues, setsDone } from './results'
 
@@ -13,8 +23,13 @@ export interface SessionSummary {
   type: DayType
   title: string | null
   status: SessionStatus
+  /** Done sets of the exercises counted in setsPlanned (extra sets included). */
   setsDone: number
   setsPlanned: number
+  /** Done sets of optional exercises (block "Opzionale"): outside setsDone/setsPlanned. */
+  setsOptionalDone: number
+  /** Done sets of exercises hidden by the session's elbow level (logged before a re-score). */
+  setsHiddenDone: number
   rpe: number | null
   elbowPre: number | null
   elbowDuring: number | null
@@ -27,7 +42,10 @@ export interface TestResultSummary {
   key: string
   /** Exercise name as written in the plan day. */
   name: string
-  /** Short name for the chat text: library label, falling back to `name`. */
+  /**
+   * Short name for the chat text: `name` up to the first ":" (check-gomito: the library label),
+   * with " · <short date>" appended when two tests of the week would read the same.
+   */
   label: string
   unit: string | null
   /** Best value (per_side: null, see dx/sx). For check-gomito: the elbow score. */
@@ -100,33 +118,73 @@ function findLog(session: SessionLog | undefined, index: number, ex: Exercise): 
   return Object.values(session.exercises).find((l) => l && l.key === ex.key && l.kind === ex.kind)
 }
 
-function doneSets(session: SessionLog | undefined): number {
-  if (!session?.exercises) return 0
-  let n = 0
-  for (const log of Object.values(session.exercises)) if (log) n += setsDone(log)
-  return n
+interface SetCounts {
+  planned: number
+  done: number
+  optionalDone: number
+  hiddenDone: number
 }
 
-function plannedSets(plan: Plan, day: Day, level: ElbowLevel | null): number {
-  let n = 0
+/**
+ * Planned and done sets of a training day at the session's elbow level, with the same rule as
+ * Oggi's "Serie X/Y": only exercises that are visible and not 'info' count (plannedSetCount), so
+ * sets done on an exercise hidden by a later elbow change go to `hiddenDone` instead. Optional
+ * exercises (block "Opzionale") count in neither: their done sets go to `optionalDone`. Extra sets
+ * on a counted exercise count too (not capped). The elbow check counts as done once the session
+ * has a score or a manual traffic light (the gate is settled), even without its set log.
+ */
+function setCounts(plan: Plan, day: Day, session: SessionLog | undefined, level: ElbowLevel | null): SetCounts {
+  const out: SetCounts = { planned: 0, done: 0, optionalDone: 0, hiddenDone: 0 }
+  const used = new Set<ExerciseLog>()
   for (const e of applyElbow(day, plan.library, level)) {
-    if (!e.hidden && e.ex.kind !== 'info') n += e.sets ?? 0
+    if (e.ex.kind === 'info') continue
+    const log = findLog(session, e.index, e.ex)
+    // findLog's key fallback must not count one log twice.
+    let done = log && !used.has(log) ? setsDone(log) : 0
+    if (log) used.add(log)
+    if (e.hidden) {
+      out.hiddenDone += done
+      continue
+    }
+    if (e.ex.key === CHECK_KEY && (session?.elbowPre != null || session?.elbowOverride != null)) done = Math.max(done, 1)
+    if (isOptional(e.ex)) {
+      out.optionalDone += done
+    } else {
+      out.planned += plannedSetCount(e)
+      out.done += done
+    }
   }
-  return n
+  return out
 }
 
-function statusOf(day: Day, session: SessionLog | undefined, done: number, planned: number, today: string): SessionStatus {
+function statusOf(day: Day, session: SessionLog | undefined, counts: SetCounts, today: string): SessionStatus {
   if (day.type === 'RIPOSO') return 'rest'
-  if (session?.skipped) return 'skipped'
-  if (done > 0) return done >= planned ? 'done' : 'partial'
+  const worked = counts.done + counts.optionalDone + counts.hiddenDone > 0
+  // A skipped mark left on a session that was trained afterwards does not hide the work.
+  if (session?.skipped && !worked) return 'skipped'
+  if (worked) return counts.done >= counts.planned ? 'done' : 'partial'
   return day.date < today ? 'skipped' : 'planned'
+}
+
+/** Chat label of a test: the plan name up to the first ":" (check-gomito: the library label). */
+function testLabel(ex: Exercise, lib: LibraryEntry | null): string {
+  const label = lib?.label.trim() ?? ''
+  const name = ex.name.trim()
+  if (ex.key === CHECK_KEY) return label || name
+  return name.split(':')[0].trim() || label || name
+}
+
+/** Appends " · <short date>" to the labels that more than one test of the week would share. */
+function disambiguate(tests: TestResultSummary[]): TestResultSummary[] {
+  const seen = new Map<string, number>()
+  for (const t of tests) seen.set(t.label, (seen.get(t.label) ?? 0) + 1)
+  return tests.map((t) => ((seen.get(t.label) ?? 0) > 1 ? { ...t, label: `${t.label} · ${formatShortDate(t.date)}` } : t))
 }
 
 function testResult(plan: Plan, day: Day, session: SessionLog | undefined, ex: Exercise, index: number): TestResultSummary {
   const log = findLog(session, index, ex)
   const lib = libraryEntry(plan.library, ex.key)
-  const label = lib?.label.trim() || ex.name
-  const base = { date: day.date, key: ex.key, name: ex.name, label }
+  const base = { date: day.date, key: ex.key, name: ex.name, label: testLabel(ex, lib) }
   const text = log?.text?.trim() || null
 
   if (ex.key === CHECK_KEY) {
@@ -171,17 +229,21 @@ function average(values: number[]): number | null {
 /**
  * Builds the week summary for the current plan.
  * Week range: plan.start..plan.end (fallback: min..max of days[].date).
- * Per training day (type !== 'RIPOSO'):
- *   setsPlanned = sum of effective sets (applyElbow with the session's level) over exercises
- *                 that are not hidden and not kind 'info' (sets null -> 0);
- *   setsDone    = done sets from the session log (capped per exercise is NOT applied: extra
- *                 sets count, but status uses done >= planned);
- *   status: session.skipped -> 'skipped'; setsDone >= setsPlanned > 0 -> 'done';
- *           0 < setsDone < setsPlanned -> 'partial'; setsDone 0 and date < today -> 'skipped';
- *           otherwise 'planned'. (Sets done on a day with 0 planned sets -> 'done'.)
+ * Per training day (type !== 'RIPOSO'), with the session's elbow level (applyElbow):
+ *   setsPlanned = plannedSetCount over the exercises that are not optional (block "Opzionale"):
+ *                 visible, not kind 'info', sets null -> 1;
+ *   setsDone    = done sets of those same exercises (same as Oggi's "Serie X/Y"; extra sets
+ *                 count, not capped). The elbow check counts as done once the session has a score
+ *                 or a manual traffic light;
+ *   setsOptionalDone / setsHiddenDone = done sets of optional exercises / of exercises hidden by
+ *                 the level (logged before a re-score): reported, never compared with setsPlanned;
+ *   status: work = setsDone + setsOptionalDone + setsHiddenDone > 0.
+ *           session.skipped and no work -> 'skipped'; work and setsDone >= setsPlanned -> 'done';
+ *           other work -> 'partial'; no work and date < today -> 'skipped'; else 'planned'.
+ *           (Work on a day with 0 planned sets -> 'done'.)
  * RIPOSO days -> status 'rest' (setsPlanned 0), not counted in `counts`.
  * Tests: every exercise with test=true in training days, in plan order; check-gomito uses
- *   session.elbowPre as value.
+ *   session.elbowPre as value. Labels: see TestResultSummary.label.
  * Elbow max: max over sessions' elbowPre/elbowDuring and days' elbowNextMorning in range.
  * Weight/sleep averages over DayLog entries in range (null when none).
  * Notes: non-empty session notes in date order.
@@ -201,9 +263,10 @@ export function computeWeekSummary(input: WeekSummaryInput): WeekSummary {
     const session = sessions[day.date]
     const level = sessionElbowLevel(session, plan.elbow)
     const rest = day.type === 'RIPOSO'
-    const planned = rest ? 0 : plannedSets(plan, day, level)
-    const done = doneSets(session)
-    const status = statusOf(day, session, done, planned, today)
+    const sets: SetCounts = rest
+      ? { planned: 0, done: 0, optionalDone: 0, hiddenDone: 0 }
+      : setCounts(plan, day, session, level)
+    const status = statusOf(day, session, sets, today)
     if (status !== 'rest') counts[status]++
 
     summaries.push({
@@ -212,8 +275,10 @@ export function computeWeekSummary(input: WeekSummaryInput): WeekSummary {
       type: day.type,
       title: day.title,
       status,
-      setsDone: done,
-      setsPlanned: planned,
+      setsDone: sets.done,
+      setsPlanned: sets.planned,
+      setsOptionalDone: sets.optionalDone,
+      setsHiddenDone: sets.hiddenDone,
       rpe: session?.rpe ?? null,
       elbowPre: session?.elbowPre ?? null,
       elbowDuring: session?.elbowDuring ?? null,
@@ -252,7 +317,7 @@ export function computeWeekSummary(input: WeekSummaryInput): WeekSummary {
     end,
     sessions: summaries,
     counts,
-    tests,
+    tests: disambiguate(tests),
     elbowMax,
     elbowMaxLevel: elbowMax != null ? elbowLevel(elbowMax, plan.elbow) : null,
     weightAvg: average(weights),
@@ -291,7 +356,10 @@ const oneLine = (s: string) => s.replace(/\s*\n+\s*/g, ' / ').replace(/[ \t]+/g,
 function sessionLine(s: SessionSummary): string {
   const head = `• ${formatShortDate(s.date)}`
   if (s.status === 'rest') return `${head} · ${STATUS_TEXT.rest}`
-  const parts = [STATUS_TEXT[s.status], `serie ${s.setsDone}/${s.setsPlanned}`]
+  let sets = `serie ${s.setsDone}/${s.setsPlanned}`
+  if (s.setsOptionalDone) sets += ` + ${plural(s.setsOptionalDone, 'opzionale', 'opzionali')}`
+  if (s.setsHiddenDone) sets += ` + ${plural(s.setsHiddenDone, 'nascosta', 'nascoste')} per il gomito`
+  const parts = [STATUS_TEXT[s.status], sets]
   if (s.rpe != null) parts.push(`RPE ${formatNumberIt(s.rpe)}`)
   const elbow: string[] = []
   if (s.elbowLevel) {

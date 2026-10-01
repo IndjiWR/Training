@@ -27,6 +27,10 @@ export function HoldTracker({ t, log }: TrackerProps) {
   const pm = usePercentMax(ex, t.date, t.eff.index)
   const minS = isPct ? (pm?.min ?? null) : targetSeconds(ex.target_min, ex.unit)
   const maxS = isPct ? (pm?.max ?? null) : targetSeconds(ex.target_max, ex.unit)
+  // per_side %max with a max recorded per side: each side's band comes from its own max.
+  const sides = pm?.sides ?? null
+  const limitsFor = (side: Side | null): { min: number | null; max: number | null } =>
+    side && sides ? sides[side] : { min: minS, max: maxS }
   const band = isPct ? null : formatBand(ex.target_min, ex.target_max, ex.unit ?? 's')
 
   const rowName = (i: number, side: Side | null) => (side ? `Serie ${i + 1}, ${SIDE_NAME[side]}` : `Serie ${i + 1}`)
@@ -54,14 +58,15 @@ export function HoldTracker({ t, log }: TrackerProps) {
             setIndex={i}
             side={side}
             label={rowName(i, side)}
-            targetMin={minS}
-            targetMax={maxS}
+            targetMin={limitsFor(side).min}
+            targetMax={limitsFor(side).max}
             manualLabel={`Secondi tenuti (${rowName(i, side).toLowerCase()})`}
           />
         )}
         describeDone={(value, i, side) => ({
           text: value != null ? formatSeconds(value) : 'fatto',
-          feedback: value != null ? <BandFeedback value={value} min={minS} max={maxS} /> : null,
+          feedback:
+            value != null ? <BandFeedback value={value} min={limitsFor(side).min} max={limitsFor(side).max} /> : null,
           editor: (close) => (
             <NumberEntry
               label="Secondi tenuti"

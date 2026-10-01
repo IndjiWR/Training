@@ -21,6 +21,15 @@ export function RepsTracker({ t, log }: TrackerProps) {
   const pm = usePercentMax(ex, t.date, t.eff.index)
   const unit = repsUnit(ex)
   const target = isPct ? (pm?.max ?? 0) : (ex.target_max ?? ex.target_min ?? 0)
+  // per_side %max with a max recorded per side: each side gets the % of its own max.
+  const sides = pm?.sides ?? null
+  const targetFor = (side: Side | null) => (side && sides ? sides[side].max : target)
+  const hint =
+    isPct && !pm
+      ? null
+      : sides && sides.dx.max !== sides.sx.max
+        ? `dx ${sides.dx.max} · sx ${sides.sx.max} ${unit}`
+        : `${target} ${unit}`
   const band = isPct ? null : formatBand(ex.target_min, ex.target_max, ex.unit ?? 'rep')
   const { drafts, setDraft, clearDraft } = useDrafts()
 
@@ -42,10 +51,10 @@ export function RepsTracker({ t, log }: TrackerProps) {
         t={t}
         log={log}
         rowTitle={(i) => `Serie ${i + 1}`}
-        pendingHint={isPct && !pm ? null : `${target} ${unit}`}
+        pendingHint={hint}
         renderEntry={(i, side) => {
           const key = draftKey(i, side)
-          const value = drafts[key] ?? valueAt(log?.sets[i], side) ?? target
+          const value = drafts[key] ?? valueAt(log?.sets[i], side) ?? targetFor(side)
           return (
             <CountEntry
               label={`Ripetizioni ${rowName(i, side)}`}
@@ -66,7 +75,7 @@ export function RepsTracker({ t, log }: TrackerProps) {
           editor: (close) => (
             <CountEditor
               label={`Ripetizioni ${rowName(i, side)}`}
-              initial={value ?? target}
+              initial={value ?? targetFor(side)}
               unit={unit}
               onSave={(v) => {
                 editValue(t, i, side, v)
