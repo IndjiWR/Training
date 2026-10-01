@@ -1,3 +1,4 @@
+import { startSession } from '../../state/actions'
 import { useTimer } from '../../state/timers'
 import { IconCheck } from '../icons'
 import { CountdownTimer } from '../timers/CountdownTimer'
@@ -21,7 +22,10 @@ export interface HoldEntryProps extends TimerEntryBase {
   manualLabel: string
 }
 
-/** HoldTimer for a row/side; "Inserisci a mano" is offered only while no timer is running. */
+/**
+ * HoldTimer for a row/side; "Inserisci a mano" is offered only while no timer is running.
+ * Starting a timer starts the session (screen kept on), like completing a set does.
+ */
 export function HoldEntry({ t, setIndex, side, label, targetMin, targetMax, prepSeconds, manualLabel }: HoldEntryProps) {
   const id = timerId(t, setIndex, side)
   const running = useTimer(id) != null
@@ -34,6 +38,7 @@ export function HoldEntry({ t, setIndex, side, label, targetMin, targetMax, prep
         targetMax={targetMax}
         prepSeconds={prepSeconds}
         label={label}
+        onStart={() => startSession(t.date)}
         onStop={(seconds) => complete(t, setIndex, side, seconds, { tap: false })}
       />
       {!running && (
@@ -58,6 +63,7 @@ export function CountdownEntry({ t, setIndex, side, label, seconds }: CountdownE
         id={id}
         seconds={seconds}
         label={label}
+        onStart={() => startSession(t.date)}
         onComplete={(elapsed) => complete(t, setIndex, side, elapsed, { tap: false })}
       />
       {!running && (

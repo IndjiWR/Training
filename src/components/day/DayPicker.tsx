@@ -39,7 +39,8 @@ export function DayPicker({ days, selected, today, sessions, onSelect }: DayPick
         {days.map((d, i) => {
           const s = sessions[d.date]
           const closed = Boolean(s?.finishedAt)
-          const skipped = !closed && Boolean(s?.skipped)
+          // A skip mark left on a session that was started afterwards does not count.
+          const skipped = !closed && Boolean(s?.skipped) && !s?.startedAt
           const isToday = d.date === today
           const short = formatShortDate(d.date)
           const type = DAY_TYPE_LABEL[d.type]

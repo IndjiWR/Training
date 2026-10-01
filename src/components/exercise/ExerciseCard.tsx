@@ -13,7 +13,7 @@ import { HoldTracker } from './HoldTracker'
 import { RepsTracker } from './RepsTracker'
 import { TestNotes } from './TestNotes'
 import { TimeTracker } from './TimeTracker'
-import { isAttemptKind, isUntouched, type TrackerProps } from './tracker'
+import { clearExerciseTimers, isAttemptKind, isUntouched, type TrackerProps } from './tracker'
 import { WarmupList } from './WarmupList'
 import './exercise.css'
 
@@ -209,6 +209,8 @@ function TrackedCard({ date, plan, eff, session, locked, expanded, onToggle }: E
                 <div className="ex-foot__end">
                   <ResetButton
                     onConfirm={() => {
+                      // Running holds/countdowns of the cleared rows would come back (or ring) later.
+                      clearExerciseTimers(date, eff.index)
                       resetExercise(date, eff.index)
                       setResetKey((k) => k + 1)
                     }}
@@ -228,11 +230,19 @@ function TrackedCard({ date, plan, eff, session, locked, expanded, onToggle }: E
 /** check-gomito: the score is entered by the day screen; here only its outcome. */
 function ElbowStatus({ plan, session }: { plan: Plan; session: SessionLog | undefined }) {
   const score = session?.elbowPre ?? null
+  const override = session?.elbowOverride ?? null
   if (score == null) {
-    return <p className="banner banner--info ex-elbow">Da fare in cima alla pagina</p>
+    // A colour chosen by hand settles the check without a score (the gate is gone).
+    return override ? (
+      <p className={`banner ${LEVEL_BANNER[override]} ex-elbow`}>
+        Semaforo impostato a mano: {levelEmoji(override)} {levelLabel(override)} · senza voto (aggiungilo con
+        «Modifica» in alto)
+      </p>
+    ) : (
+      <p className="banner banner--info ex-elbow">Da fare in cima alla pagina</p>
+    )
   }
   const level = elbowLevel(score, plan.elbow)
-  const override = session?.elbowOverride ?? null
   return (
     <p className={`banner ${LEVEL_BANNER[override ?? level]} ex-elbow`}>
       Voto gomito: <strong className="num">{score}/10</strong> {levelEmoji(level)} {levelLabel(level)}

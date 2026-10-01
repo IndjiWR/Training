@@ -13,6 +13,7 @@ import { EmptyPlan } from '../components/day/EmptyPlan'
 import { PlanStrip } from '../components/day/PlanStrip'
 import { SessionPanel, SessionStart, SessionStatus } from '../components/day/SessionPanel'
 import { useSelectedDay } from '../components/day/useSelectedDay'
+import { useWorkoutActive } from '../components/day/useWorkoutActive'
 import '../components/day/day.css'
 
 /** "Oggi": the day of the plan (today's or the chosen one) with the whole session flow. */
@@ -37,8 +38,15 @@ function PlanDay({ plan }: { plan: Plan }) {
   const elbowPending = hasCheck && session?.elbowPre == null && session?.elbowOverride == null
   const checkIndex = elbowPending ? day.exercises.findIndex((e) => e.key === CHECK_KEY) : -1
   const isRest = day.type === 'RIPOSO'
+  // Rest days get the session UI too when they have something to track (e.g. active recovery) or
+  // a session was started, so it can be closed (RPE, notes) like any other.
+  const showSession =
+    !isRest || Boolean(session?.startedAt) || effs.some((e) => !e.hidden && e.ex.kind !== 'info')
 
-  const wake = useWakeLock(Boolean(session?.startedAt && !session?.finishedAt))
+  // Follows the workout, not the shown day: an open session of any day, the rest timer or a running
+  // exercise timer (warm-up countdown before "Inizia sessione") keep the screen on.
+  const workoutActive = useWorkoutActive()
+  const wake = useWakeLock(workoutActive)
 
   return (
     <>
@@ -58,7 +66,7 @@ function PlanDay({ plan }: { plan: Plan }) {
 
       <DayHeader day={day} />
 
-      {!isRest && <SessionStatus session={session} progress={progress} wakeLocked={wake.locked} />}
+      {showSession && <SessionStatus session={session} progress={progress} wakeLocked={wake.locked} />}
 
       {hasCheck && (
         <ElbowSection
@@ -73,7 +81,7 @@ function PlanDay({ plan }: { plan: Plan }) {
         />
       )}
 
-      {!isRest && <SessionStart date={date} session={session} elbowPending={elbowPending} />}
+      {showSession && <SessionStart date={date} session={session} elbowPending={elbowPending} />}
 
       <DayExercises
         key={`exercises-${date}`}
@@ -85,7 +93,7 @@ function PlanDay({ plan }: { plan: Plan }) {
         excludeIndex={checkIndex >= 0 ? checkIndex : null}
       />
 
-      {!isRest && (
+      {showSession && (
         <SessionPanel key={`session-${date}`} date={date} session={session} progress={progress} elbow={plan.elbow} />
       )}
 

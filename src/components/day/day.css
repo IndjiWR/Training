@@ -1,14 +1,11 @@
 /* "Oggi" — day view, session flow, elbow check, day log (prefix dy-). */
 
+/* Inside .sh-main, which already gives the safe-area insets, side gutters and max width. */
 .dy-screen {
-  width: 100%;
-  max-width: 40rem;
-  margin: 0 auto;
-  padding: var(--pad);
-  padding-top: calc(var(--pad) + var(--safe-top));
   display: flex;
   flex-direction: column;
   gap: var(--gap);
+  padding-top: 0.5rem;
 }
 
 /* ───── collapsible <details> ───── */

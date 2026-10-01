@@ -29,9 +29,11 @@
   --ok: #34d873;
   --on-ok: #03190b;
   --ok-soft: rgb(52 216 115 / 0.16);
+  --ok-text: var(--ok); /* small ok/warn TEXT: >= 4.5:1 on every surface */
   --warn: #ffd23f;
   --on-warn: #1f1800;
   --warn-soft: rgb(255 210 63 / 0.16);
+  --warn-text: var(--warn);
   --danger: #ff5c5c;
   --on-danger: #1f0303;
   --danger-soft: rgb(255 92 92 / 0.16);
@@ -64,9 +66,11 @@
   --ok: #0b7a37;
   --on-ok: #ffffff;
   --ok-soft: rgb(11 122 55 / 0.12);
+  --ok-text: #075c29; /* --ok is only ~4.4:1 on surface-2: darker for small text */
   --warn: #8a6400;
   --on-warn: #ffffff;
   --warn-soft: rgb(255 196 0 / 0.28);
+  --warn-text: #6b4d00;
   --danger: #c0141b;
   --on-danger: #ffffff;
   --danger-soft: rgb(192 20 27 / 0.12);
@@ -434,13 +438,18 @@ textarea {
 }
 
 /* ───── score grid 0-10 ───── */
+/* At most 6 columns; when 6 would be narrower than the tap target, fewer columns
+   (never below var(--tap) wide). Keep --score-gap in sync with the 5 gaps of 6 columns. */
 .score-grid {
+  --score-gap: 0.5rem;
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.5rem;
+  grid-template-columns: repeat(
+    auto-fill,
+    minmax(max(var(--tap), calc((100% - 5 * var(--score-gap)) / 6)), 1fr)
+  );
+  gap: var(--score-gap);
 }
 .score-grid .btn {
-  min-width: 0;
   padding: 0;
   font-size: 1.375rem;
   font-variant-numeric: tabular-nums;

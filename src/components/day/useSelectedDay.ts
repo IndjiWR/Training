@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Plan } from '../../plan/schema'
 import { pickDefaultDay, todayISO, type DayPickReason } from '../../lib/date'
+import { useAppData } from '../../state/store'
+import { sessionRunning } from './dayUtils'
 
 /**
  * Selected day of the "Oggi" screen. The default is today's day (Europe/Rome) or the next one;
  * a manual choice lives in sessionStorage (one key per plan id) so switching tabs keeps it.
  * A choice made on a previous calendar day is ignored, so reopening the app the next morning
- * shows the new day.
+ * shows the new day. Exception: when midnight passes while the shown day's session is running
+ * (started less than CARRY_MS ago, not finished), that day stays shown.
  */
 
 const KEY_PREFIX = 'training:oggi:day:'
+/** A session started at most this long before midnight keeps its day on screen past midnight. */
+const CARRY_MS = 6 * 3_600_000
 
 interface StoredChoice {
   /** Selected day date. */
@@ -76,6 +81,7 @@ export interface DaySelection {
 export function useSelectedDay(plan: Plan): DaySelection {
   const today = useToday()
   const key = KEY_PREFIX + plan.id
+  const sessions = useAppData((s) => s.sessions)
   const pick = useMemo(
     () => pickDefaultDay(plan.days, today) ?? { index: 0, reason: 'past' as DayPickReason },
     [plan.days, today],
@@ -92,6 +98,25 @@ export function useSelectedDay(plan: Plan): DaySelection {
   if (choice && choice.on === today) {
     const i = plan.days.findIndex((d) => d.date === choice.date)
     if (i >= 0) index = i
+  }
+
+  // Midnight during a running session: keep the shown day by turning it into a choice made on the
+  // new day (adjusting state during render, so the new day never flashes). Only for a recent start:
+  // reopening the app the next morning still shows the new day.
+  const shownDate = plan.days[index]?.date ?? ''
+  const [last, setLast] = useState({ today, date: shownDate })
+  if (last.today !== today) {
+    const running = sessionRunning(sessions[last.date], Date.now(), CARRY_MS)
+    const i = running ? plan.days.findIndex((d) => d.date === last.date) : -1
+    if (i >= 0 && i !== index) {
+      const next = { date: last.date, on: today }
+      writeChoice(key, next)
+      setState({ key, choice: next })
+      index = i
+    }
+    setLast({ today, date: plan.days[index]?.date ?? '' })
+  } else if (last.date !== shownDate) {
+    setLast({ today, date: shownDate })
   }
 
   const select = useCallback(

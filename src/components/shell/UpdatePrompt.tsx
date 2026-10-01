@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
-import { todayISO } from '../../lib/date'
-import { useAppData } from '../../state/store'
-import { toast, useRestTimer } from '../../state/ui'
+import { toast } from '../../state/ui'
+import { useWorkoutActive } from '../day/useWorkoutActive'
 import { IconRefresh } from '../icons'
 
 const UPDATE_CHECK_MS = 60 * 60 * 1000
@@ -19,24 +18,6 @@ function scheduleUpdateChecks(registration: ServiceWorkerRegistration | undefine
       /* offline or server unreachable: try again at the next tick */
     })
   }, UPDATE_CHECK_MS)
-}
-
-function safeToday(): string | null {
-  try {
-    return todayISO()
-  } catch {
-    return null
-  }
-}
-
-/** True while a workout is running: a rest timer, or today's session started and not closed. */
-function useWorkoutInProgress(): boolean {
-  const rest = useRestTimer()
-  const sessions = useAppData((s) => s.sessions)
-  if (rest) return true
-  const today = safeToday()
-  const session = today ? sessions[today] : undefined
-  return Boolean(session && session.startedAt && !session.finishedAt && !session.skipped)
 }
 
 /**
@@ -56,7 +37,7 @@ export function UpdatePrompt() {
     },
   })
   const [updating, setUpdating] = useState(false)
-  const inWorkout = useWorkoutInProgress()
+  const inWorkout = useWorkoutActive()
 
   // Safety net: if the reload does not happen, give the button back with a hint.
   useEffect(() => {

@@ -26,7 +26,9 @@
   max-width: 40rem;
   margin: 0 auto;
   padding-top: max(var(--safe-top), 0.5rem);
-  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 7rem);
+  /* Room for the rest dock: 7rem fits the rest panel alone; --dock-h (its measured height, set by
+     RestTimerBar) takes over when countdown chips stack on it or the panel wraps. */
+  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + max(7rem, var(--dock-h, 0rem) + 0.25rem));
   padding-left: max(var(--pad), env(safe-area-inset-left, 0rem));
   padding-right: max(var(--pad), env(safe-area-inset-right, 0rem));
 }
