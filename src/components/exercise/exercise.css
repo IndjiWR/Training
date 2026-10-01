@@ -9,9 +9,6 @@
   flex-direction: column;
   padding: 0;
 }
-.ex-card--open {
-  border-color: var(--border-strong);
-}
 .ex-card[data-state='done'] {
   border-color: var(--ok);
 }
@@ -24,38 +21,18 @@
 .ex-card--locked {
   opacity: 0.5;
 }
-.ex-card--locked .ex-head,
 .ex-card--locked .ex-body,
 .ex-card--locked .ex-foot {
   pointer-events: none;
 }
 
-.ex-card__h {
-  margin: 0;
-  font-size: inherit;
-  font-weight: inherit;
-}
-
-/* ───── header (one big toggle button) ───── */
+/* ───── header (static: the card is always open) ───── */
 .ex-head {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr;
   align-items: start;
   gap: 0.75rem;
-  width: 100%;
-  min-height: var(--tap-big);
-  padding: 0.875rem var(--pad);
-  border: 0;
-  border-radius: var(--radius);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  touch-action: manipulation;
-}
-.ex-head[aria-disabled='true'] {
-  cursor: not-allowed;
+  padding: 1rem var(--pad) 0.75rem;
 }
 .ex-pos {
   display: grid;
@@ -84,36 +61,43 @@
   min-width: 0;
 }
 .ex-head__name {
-  font-size: 1.0625rem;
+  margin: 0;
+  font-size: 1.25rem;
   font-weight: 800;
   line-height: 1.25;
   overflow-wrap: anywhere;
 }
 .ex-head__meta {
+  margin: 0;
   color: var(--text-muted);
-  font-size: 0.9375rem;
+  font-size: 1rem;
+  font-weight: 600;
 }
 .ex-head__badges {
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
+  margin: 0;
 }
 .ex-head__badges:empty {
   display: none;
 }
-.ex-head__chev {
-  width: 1.5rem;
-  height: 1.5rem;
-  margin-top: 0.375rem;
-  color: var(--text-muted);
-  transition: transform 0.2s ease;
-}
-.ex-head[aria-expanded='true'] .ex-head__chev {
-  transform: rotate(180deg);
-}
 .ex-badge-lc {
   text-transform: none;
   letter-spacing: 0;
+}
+.ex-badge-icon {
+  width: 0.9375rem;
+  height: 0.9375rem;
+}
+
+/* Video + rest, right under the header: what to look up before starting. */
+.ex-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
 }
 
 /* ───── info card (not collapsible) ───── */
@@ -138,9 +122,6 @@
   flex-direction: column;
   gap: 0.875rem;
   padding: 0 var(--pad) var(--pad);
-}
-.ex-body[hidden] {
-  display: none;
 }
 .ex-note {
   white-space: pre-line;
@@ -171,6 +152,7 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 0.5rem;
   padding-top: 0.75rem;
   border-top: 0.0625rem solid var(--border);
@@ -198,12 +180,7 @@
 .ex-undo {
   margin-top: 0.375rem;
 }
-.ex-foot__end {
-  display: flex;
-  flex: 1 1 auto;
-  justify-content: flex-end;
-}
-.ex-foot__end .ex-reset {
+.ex-foot .ex-reset {
   flex: 1 1 auto;
 }
 .ex-rowctl {

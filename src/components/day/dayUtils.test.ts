@@ -7,7 +7,10 @@ import { createCountdown, createCountUp, pausedState, type TimerMap } from '../.
 import type { ExerciseLog, SessionLog, SetLog } from '../../state/types'
 import {
   elbowSettled,
+  firstIncompletePos,
+  initialSlide,
   isComplete,
+  nextIncompletePos,
   plannedSets,
   previousDate,
   sessionProgress,
@@ -241,5 +244,37 @@ describe('previousDate', () => {
     expect(previousDate('2026-10-1')).toBeNull()
     expect(previousDate('2026-02-30')).toBeNull()
     expect(previousDate('2026-13-01')).toBeNull()
+  })
+})
+
+describe('exercise carousel positions', () => {
+  // Exercise indexes in carousel order (main first, then home) and their completion.
+  const order = [0, 2, 3, 5, 9]
+  const complete = new Map([
+    [0, true],
+    [2, true],
+    [3, false],
+    [5, true],
+    [9, false],
+  ])
+
+  it('starts on the first incomplete exercise, or the first one when all are done', () => {
+    expect(firstIncompletePos(order, complete)).toBe(2)
+    expect(firstIncompletePos(order, new Map(order.map((i) => [i, true])))).toBe(0)
+    expect(firstIncompletePos([], complete)).toBe(0)
+  })
+
+  it('advances forward to the next incomplete exercise, never backwards', () => {
+    expect(nextIncompletePos(order, complete, 2)).toBe(4)
+    expect(nextIncompletePos(order, complete, 0)).toBe(2)
+    expect(nextIncompletePos(order, complete, 4)).toBe(-1)
+  })
+
+  it('reopens on the remembered exercise while it is still shown', () => {
+    expect(initialSlide(order, complete, 5)).toBe(5)
+    // Hidden by an elbow change (no longer in the order): first incomplete instead.
+    expect(initialSlide(order, complete, 7)).toBe(3)
+    expect(initialSlide(order, complete, null)).toBe(3)
+    expect(initialSlide([], complete, 5)).toBeNull()
   })
 })
