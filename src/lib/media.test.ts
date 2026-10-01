@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../scheda-corrente.json'
 import { parsePlan } from '../plan/schema'
 import {
   canonicalMediaUrl,
   describeMedia,
+  forgetCachedImage,
   hasImageExtension,
   MEDIA_REASONS,
   parseMediaUrl,
   parseStartTime,
+  PINNED_IMAGES_CACHE,
   type ParsedMedia,
   youtubeSearchUrl,
 } from './media'
@@ -142,6 +144,17 @@ describe('parseMediaUrl — YouTube', () => {
     expect(yt(`  https://youtu.be/${ID}  `).id).toBe(ID)
   })
 
+  it('drops punctuation around a pasted link', () => {
+    expect(yt(`Guarda https://youtu.be/${ID}?t=30, top`).start).toBe(30)
+    expect(yt(`https://youtu.be/${ID}.`).id).toBe(ID)
+    expect(yt(`(https://youtu.be/${ID})`).id).toBe(ID)
+    expect(yt(`Guarda (https://youtu.be/${ID}) top`).id).toBe(ID)
+    expect(yt(`Guarda https://www.youtube.com/watch?v=${ID}, top`).id).toBe(ID)
+    expect(yt(`«https://youtu.be/${ID}?t=1m»`).start).toBe(60)
+    expect(yt(`<https://youtu.be/${ID}>`).id).toBe(ID)
+    expect(yt(`Video: "https://youtu.be/${ID}?t=45"!`).start).toBe(45)
+  })
+
   it.each([
     [`https://www.youtube.com/watch?v=short`, MEDIA_REASONS.ytBadId],
     [`https://www.youtube.com/watch?v=${ID}x`, MEDIA_REASONS.ytBadId],
@@ -198,6 +211,25 @@ describe('parseMediaUrl — images and invalid input', () => {
     expect(parseMediaUrl('  example.com/a%20b.gif ')).toEqual({ type: 'image', url: 'https://example.com/a%20b.gif' })
     expect(parseMediaUrl('Guarda: https://example.com/a.gif grazie')).toEqual({ type: 'image', url: 'https://example.com/a.gif' })
     expect(parseMediaUrl('HTTPS://Example.COM/x.GIF')).toEqual({ type: 'image', url: 'https://example.com/x.GIF' })
+  })
+
+  it('drops punctuation around a pasted image link but keeps balanced brackets', () => {
+    const image = (raw: string) => {
+      const m = parseMediaUrl(raw)
+      return m.type === 'image' ? m.url : `not an image: ${JSON.stringify(m)}`
+    }
+    expect(image('Guarda https://example.com/a.gif, top')).toBe('https://example.com/a.gif')
+    expect(image('https://example.com/a.gif.')).toBe('https://example.com/a.gif')
+    expect(image('(https://example.com/a.gif)')).toBe('https://example.com/a.gif')
+    expect(image('https://example.com/File_(1)')).toBe('https://example.com/File_(1)')
+    expect(image('(https://example.com/File_(1))')).toBe('https://example.com/File_(1)')
+    expect(image('Vedi https://example.com/File_(1).')).toBe('https://example.com/File_(1)')
+    expect(image('https://example.com/a[1]')).toBe('https://example.com/a[1]')
+    expect(image('[https://example.com/a.gif]')).toBe('https://example.com/a.gif')
+  })
+
+  it('punctuation alone is not a link', () => {
+    for (const input of ['(', '...', '«»', '()']) expect(reasonOf(parseMediaUrl(input))).toBe(MEDIA_REASONS.notUrl)
   })
 
   it.each([
@@ -290,5 +322,37 @@ describe('youtubeSearchUrl', () => {
       if (!entry.video_query) continue
       expect(query(youtubeSearchUrl(entry.video_query))).toBe(entry.video_query)
     }
+  })
+})
+
+describe('forgetCachedImage', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('deletes the URL from the pinned-images cache', async () => {
+    const del = vi.fn(async () => true)
+    const open = vi.fn(async () => ({ delete: del }))
+    vi.stubGlobal('caches', { open })
+    await expect(forgetCachedImage('https://example.com/a.gif')).resolves.toBeUndefined()
+    expect(open).toHaveBeenCalledWith(PINNED_IMAGES_CACHE)
+    expect(PINNED_IMAGES_CACHE).toBe('pinned-images')
+    expect(del).toHaveBeenCalledWith('https://example.com/a.gif', { ignoreVary: true })
+  })
+
+  it('is a no-op without Cache Storage', async () => {
+    vi.stubGlobal('caches', undefined)
+    await expect(forgetCachedImage('https://example.com/a.gif')).resolves.toBeUndefined()
+  })
+
+  it('never rejects', async () => {
+    vi.stubGlobal('caches', { open: () => Promise.reject(new Error('SecurityError')) })
+    await expect(forgetCachedImage('https://example.com/a.gif')).resolves.toBeUndefined()
+    vi.stubGlobal('caches', {
+      open: () => {
+        throw new Error('sync')
+      },
+    })
+    await expect(forgetCachedImage('https://example.com/a.gif')).resolves.toBeUndefined()
   })
 })
