@@ -15,6 +15,30 @@ L'ID della cartella e il token **non sono nel codice**: si impostano nelle *Prop
 
 ---
 
+## Strada veloce: configurazione guidata dall'app (consigliata)
+
+Dal **computer** apri Training → **Impostazioni → «Crea il collegamento dal computer»**. La guida ha i
+pulsanti per copiare tutto, e il token lo genera l'app (non devi inventarlo né scriverlo):
+
+1. **Copia il codice**: è `Code.gs` con in cima due costanti, `SETUP_FOLDER_ID` (la cartella delle
+   schede) e `SETUP_TOKEN`. Il token è un segreto: non condividere quel codice.
+2. **Apri script.new** (crea un progetto Apps Script nuovo), seleziona tutto, incolla e salva.
+3. Consigliato: **Copia il manifest** e incollalo in `appsscript.json` (vedi il punto 1.4 più sotto),
+   così lo script chiede solo di *leggere* Drive.
+4. Scegli la funzione **`setup`** e premi **Esegui**: salva `FOLDER_ID` e `TOKEN` nelle *Proprietà
+   script*, chiede l'autorizzazione (come al punto 3 più sotto) e controlla la cartella. Nel log deve
+   comparire «Pronto». Poi puoi cancellare le due righe `SETUP_*`: i valori restano nelle proprietà.
+5. Pubblica come applicazione web (punto 4 più sotto) e incolla nella guida l'URL `/exec`, poi
+   **Salva e prova**.
+6. **Copia collegamento** (l'URL `/exec?token=…`) e sull'iPhone, nell'app installata, tocca
+   **«Incolla collegamento»**. Con un Mac e lo stesso ID Apple il collegamento copiato è già negli
+   appunti dell'iPhone; altrimenti mandalo a te stesso (Note, Mail…) e copialo da lì.
+
+Su iPhone l'app installata nella schermata Home non si apre dai link e ha dati separati da Safari:
+per questo il collegamento si **incolla** nell'app invece di aprirlo.
+
+Le sezioni seguenti descrivono la **configurazione a mano**, utile anche per capire cosa fa la guida.
+
 ## 1. Crea il progetto
 
 1. Apri <https://script.google.com> con l'account Google che possiede la cartella delle schede e premi
@@ -63,7 +87,9 @@ Le proprietà si possono cambiare in qualsiasi momento: valgono subito, senza un
 
 ## 3. Autorizza e verifica la configurazione
 
-1. Nell'editor, nel menu a tendina delle funzioni in alto scegli **`checkSetup`** e premi **Esegui**.
+1. Nell'editor, nel menu a tendina delle funzioni in alto scegli **`checkSetup`** e premi **Esegui**
+   (con la strada veloce si usa invece **`setup`**, che prima salva le proprietà e poi fa lo stesso
+   controllo).
 2. Alla richiesta premi **Rivedi autorizzazioni**, scegli il tuo account. Se compare *"Google non ha
    verificato questa app"* premi **Avanzate → Vai a Training – scheda (non sicuro)**: l'app è la tua.
    Il permesso richiesto è solo *vedere i file di Google Drive* (sola lettura). Premi **Consenti**.
@@ -117,8 +143,9 @@ reindirizzamento di Google).
 
 ## 6. Configura l'app
 
-In Training apri **Impostazioni**, incolla l'**URL `/exec`** e il **token**, poi premi
-**Aggiorna scheda**. Da quel momento l'app controlla da sola all'apertura e quando torna la connessione;
+In Training apri **Impostazioni**: copia l'URL di prova del punto 5 (`…/exec?token=…`) e tocca
+**«Incolla collegamento»**, oppure apri **«Inserisci URL e token a mano»** e compila i due campi.
+Da quel momento l'app controlla da sola all'apertura e quando torna la connessione;
 se arriva una scheda con `generated_at` più recente compare un avviso. Senza rete l'app continua con
 l'ultima scheda salvata.
 

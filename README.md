@@ -145,9 +145,9 @@ Apri <https://indjiwr.github.io/Training/> con la connessione attiva, poi:
 - **iPhone (Safari)**: **Condividi → «Aggiungi alla schermata Home»**.
 
 Dopo il primo caricamento l'app funziona anche senza rete. Su iPhone l'app installata ha dati
-separati da Safari: dall'app installata configura URL e token dell'endpoint (il backup non li
-contiene) ed eventualmente importa il backup. Safari su iPhone non supporta la vibrazione: resta
-il beep.
+separati da Safari (e non si apre dai link): collegala a Google Drive dall'app installata con
+**«Incolla collegamento»** (vedi sotto; il backup non contiene il collegamento) ed eventualmente
+importa il backup. Safari su iPhone non supporta la vibrazione: resta il beep.
 
 Il service worker è in modalità *prompt*: una nuova versione pubblicata non ricarica mai la pagina
 da sola, così non interrompe un allenamento in corso.
@@ -160,20 +160,31 @@ Ogni domenica la nuova scheda viene salvata in una cartella di Google Drive come
 cartella il cui nome rispetta `^scheda-\d{4}-\d{2}-\d{2}\.json$` (ordinati per nome); senza il
 token giusto risponde `{"error":"unauthorized"}`.
 
-Configurazione (guida passo passo in [`apps-script/README.md`](apps-script/README.md)):
+Configurazione guidata, una volta sola (dettagli in [`apps-script/README.md`](apps-script/README.md)):
 
-1. Crea un progetto su [script.google.com](https://script.google.com/) e incolla `Code.gs`.
-2. In **Impostazioni progetto → Proprietà script** aggiungi `FOLDER_ID` (l'ID della cartella Drive,
-   la parte finale del suo URL) e `TOKEN` (una stringa casuale lunga).
-3. **Esegui il deployment → Nuovo deployment → App web**, con *Esegui come: Me* e *Chi ha accesso:
-   Chiunque* (in inglese *Execute as: Me*, *Who has access: Anyone*); autorizza l'accesso a Drive e
-   copia l'URL che termina con `/exec`.
-4. Nell'app, in **Impostazioni**, incolla l'URL `/exec` (senza `?token=…`) e, nel suo campo, il
-   token, poi tocca **Aggiorna scheda**.
+1. **Sul computer** apri l'app → **Impostazioni → «Crea il collegamento dal computer»** e segui i
+   passi: *Copia il codice* (lo script con la cartella e un token generato dall'app), *Apri
+   script.new*, incolla, esegui la funzione **`setup`** (salva cartella e token nelle *Proprietà
+   script* e chiede il permesso di leggere Drive), poi **Esegui il deployment → Nuovo deployment →
+   App web** con *Esegui come: Me* e *Chi ha accesso: Chiunque* (*Execute as: Me*, *Who has access:
+   Anyone*). Incolla nell'app l'URL che termina con `/exec` e premi **Salva e prova**.
+2. Premi **Copia collegamento** (è l'URL `/exec?token=…`) e portalo sull'iPhone: con un Mac e lo
+   stesso ID Apple è già negli appunti dell'iPhone (Appunti universali), altrimenti mandalo a te
+   stesso (Note, Mail…).
+3. **Sull'iPhone**, nell'app installata: **«Incolla collegamento»** (in *Oggi* al primo avvio o in
+   *Impostazioni*). La scheda si scarica subito e poi da sola a ogni apertura.
+
+In alternativa resta la strada manuale: proprietà `FOLDER_ID` e `TOKEN` impostate a mano e URL +
+token inseriti in **Impostazioni → «Inserisci URL e token a mano»**.
 
 L'app scarica la scheda con una GET semplice, senza header personalizzati (Apps Script non risponde
 al preflight CORS), passando il token come parametro `?token=`. Senza endpoint resta sempre
-disponibile l'importazione manuale di un file JSON da **Impostazioni**.
+disponibile l'importazione manuale di un file JSON da **Impostazioni** (su iPhone, con l'app Google
+Drive installata, il file si sceglie direttamente da Drive: *Sfoglia → Drive*).
+
+Perché non un «Accedi con Google»: senza un server l'app riceverebbe un permesso valido un'ora e
+rinnovabile solo con un tocco, dovrebbe chiedere la lettura di tutto il Drive e su iPhone il login a
+popup dall'app installata è fragile. Lo script invece scarica la scheda da solo, senza scadenze.
 
 > **Sicurezza**: l'URL dell'endpoint e il token non sono mai nel repository. Vivono solo sul
 > dispositivo (localStorage) e sono esclusi dai backup.
@@ -265,7 +276,9 @@ npm test
 Test [vitest](https://vitest.dev/) (`src/**/*.test.ts`) che usano `scheda-corrente.json` come
 fixture. Coprono: logica del semaforo del gomito, trasformazioni giallo/rosso, calcolo `%max`,
 riepilogo settimanale, validazione della scheda, scelta del giorno (fuso `Europe/Rome`),
-sincronizzazione (URL, errori, scheda più recente), backup e parsing dei link media. Il workflow di deploy esegue i test prima di ogni build.
+sincronizzazione (URL, errori, scheda più recente), collegamento (lettura del link incollato,
+token, `Code.gs` generato con `setup()` eseguito contro servizi Google simulati), backup e parsing
+dei link media. Il workflow di deploy esegue i test prima di ogni build.
 
 ## Privacy
 
