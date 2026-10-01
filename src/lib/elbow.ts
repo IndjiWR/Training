@@ -107,6 +107,23 @@ export function applyElbow(day: Day, library: Library, level: ElbowLevel | null)
   return day.exercises.map((ex, index) => effective(index, ex, libraryEntry(library, ex.key), level))
 }
 
+/**
+ * Planned sets of an effective exercise — the one rule shared by Oggi, the session logs and the
+ * weekly summary: 0 when hidden or kind 'info'; otherwise the effective sets, with `sets: null`
+ * read as 1 (the card still shows one row to complete).
+ */
+export function plannedSetCount(e: EffectiveExercise): number {
+  return e.hidden || e.ex.kind === 'info' ? 0 : (e.sets ?? 1)
+}
+
+/**
+ * Exercise the plan marks as optional (block "Opzionale…", "… (facoltativo)"): the weekly summary
+ * keeps its sets out of the planned/done count, so skipping it does not make a session partial.
+ */
+export function isOptional(ex: Pick<Exercise, 'block'>): boolean {
+  return /\b(opzional|facoltativ)/i.test(ex.block ?? '')
+}
+
 /** library[key] or null. Own keys only: a plan key like "constructor" never hits Object.prototype. */
 export function libraryEntry(library: Library, key: string): LibraryEntry | null {
   return Object.prototype.hasOwnProperty.call(library, key) ? library[key] : null

@@ -8,9 +8,11 @@ import {
   dayHasElbowCheck,
   DEFAULT_ELBOW,
   elbowLevel,
+  isOptional,
   levelEmoji,
   levelLabel,
   libraryEntry,
+  plannedSetCount,
   rulesText,
   sessionElbowLevel,
   stopRule,
@@ -236,6 +238,25 @@ describe('applyElbow on synthetic days', () => {
     expect(libraryEntry(library, 'toString')).toBeNull()
     const [e] = applyElbow({ ...TIRATA, exercises: [mkEx({ key: 'constructor' })] }, library, 'red')
     expect(e).toMatchObject({ lib: null, hidden: false })
+  })
+})
+
+describe('plannedSetCount / isOptional', () => {
+  it('counts effective sets of visible, non-info exercises (sets null -> 1)', () => {
+    const counts = (level: 'yellow' | 'red' | null) => applyElbow(TIRATA, plan.library, level).map(plannedSetCount)
+    expect(counts(null)).toEqual([1, 3, 1, 3, 3, 4, 3, 1, 3, 3])
+    expect(counts('yellow')).toEqual([1, 3, 1, 2, 2, 0, 3, 1, 3, 3])
+    expect(counts('red')).toEqual([1, 3, 1, 0, 0, 0, 3, 1, 3, 3])
+    const day: Day = { ...TIRATA, exercises: [mkEx({ sets: null, sets_max: null }), mkEx({ kind: 'info', sets: null })] }
+    expect(applyElbow(day, plan.library, null).map(plannedSetCount)).toEqual([1, 0])
+  })
+
+  it('marks the block "Opzionale" of the fixture as optional', () => {
+    const GAMBE = dayOf('2026-10-03')
+    expect(GAMBE.exercises.filter(isOptional).map((e) => e.key)).toEqual(['camminata-salita'])
+    expect(plan.days.flatMap((d) => d.exercises).filter(isOptional)).toHaveLength(1)
+    expect(isOptional({ block: 'Extra (facoltativo)' })).toBe(true)
+    expect(isOptional({ block: null })).toBe(false)
   })
 })
 

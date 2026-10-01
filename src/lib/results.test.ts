@@ -110,7 +110,7 @@ describe('percentOf', () => {
 describe('resolvePercentMax', () => {
   it('uses the max recorded earlier the same day (the plan example: max 20 -> 3 × 12)', () => {
     const r = resolvePercentMax(dipPctEx, byDate(withMax('2026-10-01', 20)), AT)
-    expect(r).toEqual({ min: 12, max: 12, base: 20, baseDate: '2026-10-01', pctMin: 60, pctMax: 60 })
+    expect(r).toEqual({ min: 12, max: 12, base: 20, baseDate: '2026-10-01', pctMin: 60, pctMax: 60, sides: null })
   })
 
   it('rounds the reps', () => {
@@ -149,7 +149,7 @@ describe('resolvePercentMax', () => {
   it('never reads its own result', () => {
     const self = logOf(SPINTA, DIP_PCT, [done(30)], { kind: 'max' })
     const sessions = byDate(withMax('2026-09-24', 25), session('2026-10-01', [self]))
-    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX })
+    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX, dx: null, sx: null })
   })
 
   it('does not treat reps logs of the same key as results', () => {
@@ -174,6 +174,7 @@ describe('resolvePercentMax', () => {
       baseDate: '2026-10-01',
       pctMin: 60,
       pctMax: 70,
+      sides: null,
     })
   })
 
@@ -208,23 +209,70 @@ describe('resolvePercentMax', () => {
   })
 })
 
+describe('resolvePercentMax — per_side', () => {
+  const GAMBE = plan.days[2]
+  const PISTOL = 4
+  /** A later per_side exercise "pistol squat 3 × 60% del max" (no such exercise in the fixture yet). */
+  const pistolPct: Exercise = {
+    ...GAMBE.exercises[5],
+    key: 'pistol-squat',
+    name: 'Pistol squat',
+    kind: 'reps',
+    unit: '%max',
+    target_min: 60,
+    target_max: 60,
+    per_side: true,
+  }
+  const LATER = { date: '2026-10-10', index: 0 }
+  const pistolMax = (set: SetLog) => byDate(session(GAMBE.date, [logOf(GAMBE, PISTOL, [set])]))
+
+  it('gives each side a target from its own max; the top level is the weaker side', () => {
+    expect(GAMBE.exercises[PISTOL]).toMatchObject({ key: 'pistol-squat', kind: 'max', per_side: true })
+    const r = resolvePercentMax(pistolPct, pistolMax(sides(10, 5)), LATER)
+    expect(r?.sides).toEqual({ dx: { min: 6, max: 6, base: 10 }, sx: { min: 3, max: 3, base: 5 } })
+    expect(r).toMatchObject({ min: 3, max: 3, base: 5, baseDate: GAMBE.date })
+    expect(latestResult(pistolMax(sides(10, 5)), 'pistol-squat', LATER)).toEqual({
+      value: 10,
+      date: GAMBE.date,
+      index: PISTOL,
+      dx: 10,
+      sx: 5,
+    })
+  })
+
+  it('a side without a value uses the overall best; a recorded 0 stays 0', () => {
+    const onlyDx = resolvePercentMax(pistolPct, pistolMax(sides(10, null, true, false)), LATER)
+    expect(onlyDx?.sides).toEqual({ dx: { min: 6, max: 6, base: 10 }, sx: { min: 6, max: 6, base: 10 } })
+    const zero = resolvePercentMax(pistolPct, pistolMax(sides(10, 0)), LATER)
+    expect(zero?.sides?.sx).toEqual({ min: 0, max: 0, base: 0 })
+    expect(zero).toMatchObject({ min: 0, max: 0, base: 0 })
+  })
+
+  it('has no sides for an exercise that is not per_side, or a max not recorded per side', () => {
+    const r = resolvePercentMax({ ...pistolPct, per_side: false }, pistolMax(sides(10, 5)), LATER)
+    expect(r).toMatchObject({ min: 6, max: 6, base: 10, sides: null })
+    const flat = byDate(session(GAMBE.date, [logOf(GAMBE, PISTOL, [done(8)], { perSide: false })]))
+    expect(resolvePercentMax(pistolPct, flat, LATER)).toMatchObject({ min: 5, max: 5, base: 8, sides: null })
+  })
+})
+
 describe('latestResult', () => {
   it('returns the greatest (date, index) among earlier results', () => {
     const a = logOf(SPINTA, 2, [done(10)], { key: 'dip', kind: 'max' })
     const b = logOf(SPINTA, 4, [done(12)], { key: 'dip', kind: 'max' })
     const sessions = byDate(session('2026-10-01', [a, b]), withMax('2026-09-24', 25))
-    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 12, date: '2026-10-01', index: 4 })
-    expect(latestResult(sessions, 'dip', { date: '2026-10-01', index: 4 })).toEqual({ value: 10, date: '2026-10-01', index: 2 })
-    expect(latestResult(sessions, 'dip', { date: '2026-10-01', index: 0 })).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX })
-    expect(latestResult(sessions, 'dip')).toEqual({ value: 12, date: '2026-10-01', index: 4 })
+    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 12, date: '2026-10-01', index: 4, dx: null, sx: null })
+    expect(latestResult(sessions, 'dip', { date: '2026-10-01', index: 4 })).toEqual({ value: 10, date: '2026-10-01', index: 2, dx: null, sx: null })
+    expect(latestResult(sessions, 'dip', { date: '2026-10-01', index: 0 })).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX, dx: null, sx: null })
+    expect(latestResult(sessions, 'dip')).toEqual({ value: 12, date: '2026-10-01', index: 4, dx: null, sx: null })
   })
 
   it('skips logs without recorded values and other keys', () => {
     const empty = logOf(SPINTA, DIP_MAX, [open(), open()])
     const other = logOf(SPINTA, 2, [done(40)])
     const sessions = byDate(withMax('2026-09-24', 25), session('2026-10-01', [empty, other]))
-    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX })
-    expect(latestResult(sessions, 'verticale-muro', AT)).toEqual({ value: 40, date: '2026-10-01', index: 2 })
+    expect(latestResult(sessions, 'dip', AT)).toEqual({ value: 25, date: '2026-09-24', index: DIP_MAX, dx: null, sx: null })
+    expect(latestResult(sessions, 'verticale-muro', AT)).toEqual({ value: 40, date: '2026-10-01', index: 2, dx: null, sx: null })
     expect(latestResult(sessions, 'muscle-up', AT)).toBeNull()
   })
 })
