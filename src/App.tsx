@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react'
 import './components/shell/shell.css'
+import { useWorkoutActive } from './components/day/useWorkoutActive'
 import { BottomNav } from './components/shell/BottomNav'
 import { ErrorBoundary } from './components/shell/ErrorBoundary'
 import { OfflineIndicator } from './components/shell/OfflineIndicator'
@@ -8,6 +9,7 @@ import { applyTheme } from './components/shell/theme'
 import { ToastHost } from './components/shell/ToastHost'
 import { UpdatePrompt } from './components/shell/UpdatePrompt'
 import { RestTimerBar } from './components/timers/RestTimerBar'
+import { useWakeLock } from './lib/wakeLock'
 import { ExercisesScreen } from './screens/ExercisesScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { SummaryScreen } from './screens/SummaryScreen'
@@ -32,6 +34,11 @@ export function App() {
   const prevRoute = useRef(route)
 
   usePlanAutoSync()
+
+  // Screen stays on for the whole workout, whatever the tab or the day shown (rest and
+  // countdowns keep running off Oggi). Oggi claims the same shared lock for its badge.
+  const inWorkout = useWorkoutActive()
+  useWakeLock(inWorkout)
 
   useLayoutEffect(() => {
     applyTheme(theme)

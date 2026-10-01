@@ -97,6 +97,8 @@
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  /* Long values (.tm-big[data-long]) are sized from the stage width. */
+  container-type: inline-size;
 }
 button.tm-stage {
   cursor: pointer;
@@ -119,6 +121,10 @@ button.tm-stage:active {
 
 .tm-big {
   font-size: clamp(5rem, 34vw, 10rem);
+}
+/* 100 s and more: no floor, "NNNs" must fit the stage on narrow phones. */
+.tm-big[data-long='true'] {
+  font-size: min(10rem, 34vw, 50cqi);
 }
 .tm-unit {
   margin-left: 0.08em;
@@ -344,7 +350,8 @@ button.tm-stage:active {
     'bar bar';
   align-items: center;
   gap: 0.25rem 0.75rem;
-  /* Fits the 7rem the shell reserves above the nav. */
+  /* Alone it fits the 7rem the shell reserves above the nav; chips on top (or a wrapped
+     "Recupero finito") grow the dock, and the shell reserves its measured --dock-h. */
   padding: 0.5rem 0.75rem 0.625rem;
   border: 0.125rem solid var(--accent);
   border-radius: var(--radius);

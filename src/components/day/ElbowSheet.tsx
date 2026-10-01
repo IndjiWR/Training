@@ -78,8 +78,12 @@ export function ElbowSheet({ open, onClose, date, plan, session }: ElbowSheetPro
               {auto && auto !== override && <> (il voto indicherebbe {levelText(auto)})</>}.
             </p>
           )}
-          {!override && score == null && (
-            <p className="small muted">Senza voto né colore il check del gomito resta da fare.</p>
+          {score == null && (
+            <p className="small muted">
+              {override
+                ? 'Il colore chiude il check del gomito anche senza voto: se vuoi, aggiungi il voto qui sopra.'
+                : 'Senza voto né colore il check del gomito resta da fare.'}
+            </p>
           )}
         </div>
 

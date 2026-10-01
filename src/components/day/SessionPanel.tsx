@@ -47,9 +47,12 @@ export interface SessionStartProps {
   elbowPending: boolean
 }
 
-/** "Inizia sessione" + "Segna come saltata", or the skipped banner with "Annulla". */
+/**
+ * "Inizia sessione" + "Segna come saltata", or the skipped banner with "Annulla". A session started
+ * after the skip mark is being trained: the mark is stale and the banner is not shown.
+ */
 export function SessionStart({ date, session, elbowPending }: SessionStartProps) {
-  if (session?.skipped && !session.finishedAt) {
+  if (session?.skipped && !session.startedAt && !session.finishedAt) {
     return (
       <div className="banner banner--warn dy-skipped" role="status">
         <p>Sessione segnata come saltata.</p>

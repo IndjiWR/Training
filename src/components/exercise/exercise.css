@@ -294,7 +294,7 @@
   font-weight: 700;
 }
 .ex-bestline strong {
-  color: var(--ok);
+  color: var(--ok-text);
   font-size: 1.125rem;
 }
 
@@ -463,10 +463,10 @@ button.ex-done__main {
   font-weight: 700;
 }
 .ex-fb--ok {
-  color: var(--ok);
+  color: var(--ok-text);
 }
 .ex-fb--under {
-  color: var(--warn);
+  color: var(--warn-text);
 }
 .ex-fb--over {
   color: var(--accent);
@@ -491,7 +491,9 @@ button.ex-done__main {
   color: var(--text-muted);
   font-size: 0.9375rem;
 }
-.ex-error {
+/* Also beats `.field > span` (base.css), which would paint the error muted grey. */
+.ex-error,
+.field > .ex-error {
   color: var(--danger);
   font-weight: 700;
 }

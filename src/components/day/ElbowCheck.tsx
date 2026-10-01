@@ -4,6 +4,7 @@ import { elbowLevel, stopRule } from '../../lib/elbow'
 import { unlockAudio } from '../../lib/feedback'
 import { formatValue, toSeconds } from '../../lib/format'
 import { setElbowPre } from '../../state/actions'
+import { VideoButton } from '../media/VideoButton'
 import { HoldTimer } from '../timers/HoldTimer'
 import { IconCheck } from '../icons'
 import { ScoreGrid } from '../ui'
@@ -58,6 +59,9 @@ export function ElbowCheck({ date, plan, checkEx, onManual }: ElbowCheckProps) {
             {hasText(checkEx.dose) && <span className="badge">{checkEx.dose}</span>}
           </div>
           {hasText(checkEx.note) && <p className="small muted">{checkEx.note}</p>}
+          <div>
+            <VideoButton exKey={checkEx.key} fallbackQuery={checkEx.name} compact />
+          </div>
         </div>
       )}
 

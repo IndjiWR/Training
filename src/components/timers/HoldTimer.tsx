@@ -25,6 +25,8 @@ export interface HoldTimerProps {
   prepSeconds?: number
   /** Called once when the user taps to stop: whole seconds held. */
   onStop: (seconds: number) => void
+  /** Called when the user starts the timer ("Via"). */
+  onStart?: () => void
   /** Accessible label, e.g. "Serie 2". */
   label: string
   disabled?: boolean
@@ -73,7 +75,16 @@ const STATUS: Record<Zone, string> = {
  * screen locks or the app reloads, and resumes on mount. `disabled` only blocks starting: a run
  * already in progress can still be stopped or cancelled.
  */
-export function HoldTimer({ id, targetMin, targetMax, prepSeconds, onStop, label, disabled = false }: HoldTimerProps) {
+export function HoldTimer({
+  id,
+  targetMin,
+  targetMax,
+  prepSeconds,
+  onStop,
+  onStart,
+  label,
+  disabled = false,
+}: HoldTimerProps) {
   const stored = useTimer(id)
   const timer = stored?.mode === 'countup' ? stored : null
   const live = timer != null && (timer.phase === 'prep' || timer.phase === 'run')
@@ -120,6 +131,7 @@ export function HoldTimer({ id, targetMin, targetMax, prepSeconds, onStop, label
     if (disabled) return
     unlockAudio()
     startCountUp(id, label, prepSeconds ?? 3)
+    onStart?.()
   }
 
   const stop = () => {
@@ -175,7 +187,7 @@ export function HoldTimer({ id, targetMin, targetMax, prepSeconds, onStop, label
     <div className="tm-hold" data-state="run">
       <button type="button" className="tm-stage tm-stage--run" data-zone={zone} onClick={stop}>
         <span className="tm-stage__label">{label}</span>
-        <span className="bignum tm-big">
+        <span className="bignum tm-big" data-long={seconds >= 100 || undefined}>
           {seconds}
           <span className="tm-unit">s</span>
         </span>

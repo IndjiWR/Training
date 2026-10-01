@@ -5,6 +5,7 @@ import { formatClock, formatNumberIt, formatValue, toSeconds, unitLabel } from '
 import type { Exercise, LibraryEntry, Unit } from '../../plan/schema'
 import { updateSet, updateSide } from '../../state/actions'
 import { getState } from '../../state/store'
+import { clearTimer, getAllTimers } from '../../state/timers'
 import type { ExerciseLog, SetLog } from '../../state/types'
 import { startRest } from '../../state/ui'
 
@@ -109,6 +110,19 @@ export function durationLabel(value: number, unit: Unit | null): string {
   return s < 60 ? `${s}"` : formatClock(s)
 }
 
+/** The duration option (plan value in `unit`) a countdown of `durationMs` was started with, if any. */
+export function optionForDuration(
+  options: readonly number[],
+  unit: Unit | null,
+  durationMs: number | null,
+): number | undefined {
+  if (durationMs == null) return undefined
+  return options.find((o) => {
+    const s = toSeconds(o, unit)
+    return s != null && Math.round(s * 1000) === durationMs
+  })
+}
+
 /* ───────────── writing (with rest timer + haptics) ───────────── */
 
 export interface CompleteOptions {
@@ -167,9 +181,22 @@ export function complete(
   else completeSet(t, setIndex, value, opts)
 }
 
+/** Common prefix of every timer id of one exercise (trailing '#': exercise 1 never matches 10). */
+export function exerciseTimerPrefix(date: string, index: number): string {
+  return `${date}#${index}#`
+}
+
 /** Stable timer id of a row/side: `${date}#${index}#${set}` (+ `#dx` / `#sx`). */
 export function timerId(t: TrackerTarget, setIndex: number, side: Side | null): string {
-  return `${t.date}#${t.eff.index}#${setIndex}${side ? `#${side}` : ''}`
+  return `${exerciseTimerPrefix(t.date, t.eff.index)}${setIndex}${side ? `#${side}` : ''}`
+}
+
+/** Removes every persisted timer (all rows and sides) of exercise `index` of `date`. */
+export function clearExerciseTimers(date: string, index: number): void {
+  const prefix = exerciseTimerPrefix(date, index)
+  for (const id of Object.keys(getAllTimers())) {
+    if (id.startsWith(prefix)) clearTimer(id)
+  }
 }
 
 /** Changes the recorded value of a set/side, keeping its done state. */

@@ -26,8 +26,14 @@ export interface CountdownTimerProps {
   id: string
   /** Total seconds. */
   seconds: number
-  /** Called once when the countdown reaches 0 (beep + vibration fire too) or the user taps "Fatto" early: elapsed seconds. */
+  /**
+   * Called once when the countdown reaches 0 while the card is mounted (beep + vibration fire too)
+   * or the user taps "Fatto" early: elapsed seconds. A countdown that ends while the card is not
+   * mounted is recorded by the global watcher instead (see RestTimerBar).
+   */
   onComplete: (elapsedSeconds: number) => void
+  /** Called when the user starts the countdown. */
+  onStart?: () => void
   label: string
   disabled?: boolean
 }
@@ -40,10 +46,10 @@ type ViewState = 'idle' | 'running' | 'paused' | 'done'
 /**
  * time: countdown with start / pause / resume / reset; beep + vibrate at the end.
  * The run is persisted (src/state/timers.ts): when the card is not mounted the global watcher
- * (RestTimerBar) alerts at the end and marks it done; the result is handed to onComplete as soon
- * as the card mounts again. `disabled` only blocks starting.
+ * (RestTimerBar) alerts at the end, records the result in the session and marks it done; the
+ * card only clears it when it mounts again. `disabled` only blocks starting.
  */
-export function CountdownTimer({ id, seconds, onComplete, label, disabled = false }: CountdownTimerProps) {
+export function CountdownTimer({ id, seconds, onComplete, onStart, label, disabled = false }: CountdownTimerProps) {
   const stored = useTimer(id)
   const timer = stored?.mode === 'countdown' ? stored : null
   const now = useTicker(timer?.phase === 'run', 250)
@@ -97,14 +103,20 @@ export function CountdownTimer({ id, seconds, onComplete, label, disabled = fals
     if (claimOnce(`${token}@${endAt}:t${leftS}`)) tick()
   }, [view, token, endAt, leftS])
 
-  // End reached (here, or while unmounted): alert once, report the full duration once, clear.
+  // End reached: alert once, report the full duration once, clear.
   useEffect(() => {
     if (!timer || !token || phase !== 'done') return
-    if (!claimOnce(`${token}:complete`)) return
     const key = countdownAlarmKey(token)
+    // Stored phase "done" = it ended while the card was not mounted: the watcher already alerted
+    // and recorded the result (not guarded by claimOnce: claims are reset on reload).
+    if (timer.phase === 'done') {
+      disarmAlarm(key)
+      clearTimer(id)
+      return
+    }
+    if (!claimOnce(`${token}:complete`)) return
     const end = endsAt(timer)
-    // Stored phase "done" = the watcher already alerted while the card was not mounted.
-    if (timer.phase !== 'done' && claimOnce(`${token}:end`) && (end == null || Date.now() - end < ALERT_GRACE_MS)) {
+    if (claimOnce(`${token}:end`) && (end == null || Date.now() - end < ALERT_GRACE_MS)) {
       ringAlarm(key)
     } else {
       disarmAlarm(key)
@@ -128,6 +140,7 @@ export function CountdownTimer({ id, seconds, onComplete, label, disabled = fals
     unlockAudio()
     confirmTap()
     startCountdown(id, label, seconds)
+    onStart?.()
   }
 
   const pause = () => {

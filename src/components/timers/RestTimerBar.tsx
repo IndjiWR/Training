@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { tick } from '../../lib/feedback'
 import { formatClock, formatRest, formatRestRange } from '../../lib/format'
 import {
   claimOnce,
+  clearTimer,
   currentPhase,
-  endsAt,
-  markDone,
   remainingMs,
   timerToken,
   useAllTimers,
@@ -18,12 +17,12 @@ import {
   ALERT_GRACE_MS,
   armAlarm,
   COUNTDOWN_ALARM_PREFIX,
-  countdownAlarmKey,
   disarmAlarm,
   disarmAlarmsExcept,
   REST_ALARM_PREFIX,
   ringAlarm,
 } from './alarms'
+import { watchCountdowns } from './countdownResults'
 import { useTicker } from './useTicker'
 import './timers.css'
 
@@ -51,8 +50,11 @@ function hasRunningCountdown(all: TimerMap): boolean {
  * "Salta". At the end: alertEnd() once, "Recupero finito" state, then hides.
  *
  * It is also the global watcher of persisted countdowns: it queues their end beeps, completes
- * the ones whose card is not mounted (markDone + alert) and shows a chip for countdowns running
- * off-screen ("⏱ Riscaldamento 7:32") or finished while their card was closed.
+ * the ones whose card is not mounted (alert + result recorded in the session + markDone) and
+ * shows a chip for countdowns running off-screen ("⏱ Riscaldamento 7:32") or finished while
+ * their card was closed.
+ *
+ * Its height is published as `--dock-h` on <html> so the shell can reserve room for it.
  */
 export function RestTimerBar() {
   const rest = useRestTimer()
@@ -61,31 +63,26 @@ export function RestTimerBar() {
   const running = useMemo(() => hasRunningCountdown(all), [all])
   const now = useTicker(rest != null || running, 250)
   const [dismissed, setDismissed] = useState<ReadonlySet<string>>(() => new Set())
+  const dockRef = useRef<HTMLDivElement>(null)
 
-  // Countdown watcher: arm end beeps; complete the ended ones whose card is not mounted.
+  // Countdown watcher: arm end beeps; complete (and record) the ended ones whose card is not mounted.
   useEffect(() => {
-    const at = Date.now()
-    const keep = new Set<string>()
-    for (const [id, t] of Object.entries(all)) {
-      if (t.mode !== 'countdown' || t.phase !== 'run') continue
-      const token = timerToken(id, t)
-      const key = countdownAlarmKey(token)
-      const end = endsAt(t)
-      keep.add(key)
-      if (end == null) continue
-      if (end > at) {
-        armAlarm(key, end)
-        continue
-      }
-      if (id in presence) continue // the mounted card alerts and completes it
-      if (claimOnce(`${token}:end`)) {
-        if (at - end < ALERT_GRACE_MS) ringAlarm(key)
-        else disarmAlarm(key)
-      }
-      markDone(id, at)
-    }
+    const keep = watchCountdowns(all, presence, Date.now())
     disarmAlarmsExcept(COUNTDOWN_ALARM_PREFIX, keep)
   }, [all, presence, now])
+
+  // Publish the dock height: chips and a wrapped panel can outgrow the room the shell reserves.
+  useLayoutEffect(() => {
+    const el = dockRef.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const root = document.documentElement
+    const ro = new ResizeObserver(() => root.style.setProperty('--dock-h', `${el.offsetHeight}px`))
+    ro.observe(el)
+    return () => {
+      ro.disconnect()
+      root.style.removeProperty('--dock-h')
+    }
+  }, [])
 
   const chips = useMemo(() => {
     const list: Chip[] = []
@@ -115,7 +112,7 @@ export function RestTimerBar() {
       : ''
 
   return (
-    <div className="tm-dock">
+    <div className="tm-dock" ref={dockRef}>
       <p className="visually-hidden" aria-live="polite">
         {message}
       </p>
@@ -127,7 +124,10 @@ export function RestTimerBar() {
                 key={c.token}
                 type="button"
                 className="tm-chip tm-chip--done"
-                onClick={() => dismiss(c.token)}
+                onClick={() => {
+                  dismiss(c.token)
+                  clearTimer(c.id)
+                }}
                 aria-label={`${c.label} finito. Chiudi avviso`}
               >
                 <span aria-hidden="true">⏱</span>
