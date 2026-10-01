@@ -3,13 +3,20 @@ import { useAppData } from '../../state/store'
 import { importPlanFile, loadExamplePlan, refreshPlan, useSyncing } from '../../state/planSync'
 import { toast } from '../../state/ui'
 import { IconRefresh, IconSettings, IconUpload } from '../icons'
+import { PasteLink } from '../shell/DriveLink'
 import './day.css'
 
-/** "Oggi" without a plan: how to get one (settings, file import, bundled example). */
+/** Where the app is published, without the protocol (e.g. "indjiwr.github.io/Training"). */
+function appAddress(): string {
+  if (typeof location === 'undefined') return ''
+  return `${location.host}${import.meta.env.BASE_URL}`.replace(/\/$/, '')
+}
+
+/** "Oggi" without a plan: paste the Drive collegamento, or import a file, or try the example. */
 export function EmptyPlan() {
   const titleId = useId()
   const lastError = useAppData((s) => s.planMeta.lastError)
-  const hasEndpoint = useAppData((s) => s.settings.endpoint.trim() !== '')
+  const linked = useAppData((s) => s.settings.endpoint.trim() !== '' && s.settings.token.trim() !== '')
   const syncing = useSyncing()
   const [busy, setBusy] = useState(false)
 
@@ -43,8 +50,8 @@ export function EmptyPlan() {
     <section className="card dy-empty" aria-labelledby={titleId}>
       <h1 id={titleId}>Nessuna scheda</h1>
       <p className="muted">
-        Per allenarti serve la scheda della settimana. Inserisci in Impostazioni l'indirizzo dello script di Google
-        Drive per scaricarla in automatico, oppure importa a mano il file <span className="num">scheda-AAAA-MM-GG.json</span>.
+        Per allenarti serve la scheda della settimana. Una volta collegata Google Drive, l&apos;app la scarica da
+        sola ogni volta che la apri.
       </p>
 
       {lastError && (
@@ -56,9 +63,29 @@ export function EmptyPlan() {
         </div>
       )}
 
+      {linked ? (
+        <button
+          type="button"
+          className="btn btn--big btn--primary btn--block"
+          disabled={syncing}
+          onClick={() => void refreshPlan({ manual: true })}
+        >
+          <IconRefresh className={syncing ? 'sh-spin' : undefined} />
+          {syncing ? 'Scarico la scheda…' : 'Scarica la scheda'}
+        </button>
+      ) : (
+        <>
+          <PasteLink />
+          <p className="small muted">
+            Il collegamento si crea una volta sola dal computer: apri <strong>{appAddress()}</strong> → Impostazioni →
+            «Crea il collegamento dal computer».
+          </p>
+        </>
+      )}
+
       <button
         type="button"
-        className="btn btn--big btn--primary btn--block"
+        className="btn btn--outline btn--block"
         onClick={() => {
           location.hash = '#/impostazioni'
         }}
@@ -66,18 +93,6 @@ export function EmptyPlan() {
         <IconSettings />
         Apri Impostazioni
       </button>
-
-      {hasEndpoint && (
-        <button
-          type="button"
-          className="btn btn--outline btn--block"
-          disabled={syncing}
-          onClick={() => void refreshPlan({ manual: true })}
-        >
-          <IconRefresh />
-          {syncing ? 'Scarico la scheda…' : 'Scarica la scheda'}
-        </button>
-      )}
 
       <label className="btn btn--outline btn--block dy-file" aria-disabled={busy || undefined}>
         <IconUpload />
@@ -90,6 +105,9 @@ export function EmptyPlan() {
           onChange={(e) => void onFile(e)}
         />
       </label>
+      <p className="small muted">
+        Su iPhone, con l&apos;app Google Drive installata, puoi sceglierlo direttamente da lì: Sfoglia → Drive.
+      </p>
 
       <button type="button" className="btn btn--ghost btn--block" disabled={busy} onClick={() => void onExample()}>
         Prova con la scheda di esempio
