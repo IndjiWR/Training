@@ -87,6 +87,38 @@ export function sessionProgress(list: readonly EffectiveExercise[], session: Ses
   return { done, planned }
 }
 
+/* ───────────────────────── exercise carousel ───────────────────────── */
+
+/** Position in `order` of the first exercise that is not complete; 0 when all are (or none). */
+export function firstIncompletePos(order: readonly number[], complete: ReadonlyMap<number, boolean>): number {
+  const pos = order.findIndex((index) => !complete.get(index))
+  return pos >= 0 ? pos : 0
+}
+
+/** Next position after `from` whose exercise is not complete, or -1 (forward only, no wrap). */
+export function nextIncompletePos(
+  order: readonly number[],
+  complete: ReadonlyMap<number, boolean>,
+  from: number,
+): number {
+  for (let pos = from + 1; pos < order.length; pos++) if (!complete.get(order[pos])) return pos
+  return -1
+}
+
+/**
+ * Slide to show when the day opens: the remembered exercise if it is still on screen, else the
+ * first incomplete one.
+ */
+export function initialSlide(
+  order: readonly number[],
+  complete: ReadonlyMap<number, boolean>,
+  remembered: number | null,
+): number | null {
+  if (order.length === 0) return null
+  if (remembered != null && order.includes(remembered)) return remembered
+  return order[firstIncompletePos(order, complete)]
+}
+
 export function hiddenReasonText(reason: HiddenReason | null): string {
   switch (reason) {
     case 'yellow-skip':

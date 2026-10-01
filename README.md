@@ -32,8 +32,11 @@ Google Apps Script.
 
 - **Oggi**: apre il giorno della scheda con la data di oggi (fuso `Europe/Rome`) o, se non c'è,
   il prossimo in programma; un selettore porta agli altri giorni. In testa: dove, cosa portare,
-  durata e note. Esercizi nell'ordine della scheda con badge **TEST**, quelli da fare a casa
-  raggruppati in fondo sotto «A casa», card di riscaldamento espandibili.
+  durata e note (compatte durante la sessione). Gli esercizi sono un **carosello orizzontale**, uno
+  per schermata nell'ordine della scheda: si scorre con il dito o con le frecce, una barra fissa in
+  alto mostra a che punto sei (tocca per l'elenco del giorno e salta a qualsiasi esercizio), e
+  finita l'ultima serie si passa da soli al prossimo esercizio da fare. Badge **TEST**, esercizi da
+  fare a casa in fondo sotto «A casa», riscaldamenti con l'elenco dei punti.
 - **Un controllo per ogni tipo di esercizio**:
   - ripetizioni: contatore +/− per serie, precompilato con il massimo dell'obiettivo;
   - tenute: 3-2-1, poi conteggio in avanti con la fascia obiettivo evidenziata; un tocco ferma e

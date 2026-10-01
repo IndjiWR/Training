@@ -1,11 +1,8 @@
-import { useCallback, useState } from 'react'
-import type { Elbow } from '../../plan/schema'
 import { unlockAudio } from '../../lib/feedback'
 import { markSkipped, reopenSession, startSession } from '../../state/actions'
 import type { SessionLog } from '../../state/types'
 import { IconCheck, IconPlay, IconStop } from '../icons'
 import type { SessionProgress } from './dayUtils'
-import { FinishSheet } from './FinishSheet'
 import './day.css'
 
 /* ───────────────────────── status line (top) ───────────────────────── */
@@ -45,13 +42,15 @@ export interface SessionStartProps {
   session: SessionLog | undefined
   /** Elbow check pending: the gate starts the session, only "skip" is offered here. */
   elbowPending: boolean
+  /** Called after "Inizia sessione" (e.g. to bring the exercises into view). */
+  onStarted?: () => void
 }
 
 /**
  * "Inizia sessione" + "Segna come saltata", or the skipped banner with "Annulla". A session started
  * after the skip mark is being trained: the mark is stale and the banner is not shown.
  */
-export function SessionStart({ date, session, elbowPending }: SessionStartProps) {
+export function SessionStart({ date, session, elbowPending, onStarted }: SessionStartProps) {
   if (session?.skipped && !session.startedAt && !session.finishedAt) {
     return (
       <div className="banner banner--warn dy-skipped" role="status">
@@ -72,6 +71,7 @@ export function SessionStart({ date, session, elbowPending }: SessionStartProps)
           onClick={() => {
             unlockAudio()
             startSession(date)
+            onStarted?.()
           }}
         >
           <IconPlay />
@@ -87,18 +87,18 @@ export function SessionStart({ date, session, elbowPending }: SessionStartProps)
 
 /* ───────────────────────── progress / finish (bottom) ───────────────────────── */
 
+export type SessionSheet = 'finish' | 'edit'
+
 export interface SessionPanelProps {
   date: string
   session: SessionLog | undefined
   progress: SessionProgress
-  elbow: Elbow | null
+  /** Opens the end-of-session sheet (owned by the screen: the last exercise opens it too). */
+  onOpenSheet: (mode: SessionSheet) => void
 }
 
 /** Started: progress + "Termina sessione". Finished: summary card with "Modifica" / "Riapri". */
-export function SessionPanel({ date, session, progress, elbow }: SessionPanelProps) {
-  const [sheet, setSheet] = useState<'finish' | 'edit' | null>(null)
-  const closeSheet = useCallback(() => setSheet(null), [])
-
+export function SessionPanel({ date, session, progress, onOpenSheet }: SessionPanelProps) {
   if (!session?.startedAt) return null
 
   const finished = Boolean(session.finishedAt)
@@ -108,55 +108,41 @@ export function SessionPanel({ date, session, progress, elbow }: SessionPanelPro
     session.elbowDuring != null ? `gomito durante ${session.elbowDuring}/10` : null,
   ].filter(Boolean)
 
-  return (
-    <>
-      {finished ? (
-        <section className="card dy-panel" aria-label="Sessione chiusa">
-          <h2 className="dy-done-title">
-            <IconCheck />
-            Sessione chiusa
-          </h2>
-          <p className="num">
-            Serie {progress.done}/{progress.planned}
-            {meta.length > 0 && ` · ${meta.join(' · ')}`}
-          </p>
-          {session.notes && <p className="small muted pre-line">{session.notes}</p>}
-          <div className="dy-actions">
-            <button type="button" className="btn btn--outline" onClick={() => setSheet('edit')}>
-              Modifica
-            </button>
-            <button type="button" className="btn btn--outline" onClick={() => reopenSession(date)}>
-              Riapri
-            </button>
-          </div>
-        </section>
-      ) : (
-        <section className="card dy-panel" aria-label="Avanzamento della sessione">
-          <p className="dy-panel__row">
-            <span>Serie fatte</span>
-            <span className="dy-panel__count">
-              {progress.done} / {progress.planned}
-            </span>
-          </p>
-          <div className="dy-progress" aria-hidden="true">
-            <span style={{ width: `${pct}%` }} />
-          </div>
-          <button type="button" className="btn btn--big btn--primary btn--block" onClick={() => setSheet('finish')}>
-            <IconStop />
-            Termina sessione
-          </button>
-        </section>
-      )}
-      {sheet && (
-        <FinishSheet
-          mode={sheet}
-          date={date}
-          session={session}
-          progress={progress}
-          elbow={elbow}
-          onClose={closeSheet}
-        />
-      )}
-    </>
+  return finished ? (
+    <section className="card dy-panel" aria-label="Sessione chiusa">
+      <h2 className="dy-done-title">
+        <IconCheck />
+        Sessione chiusa
+      </h2>
+      <p className="num">
+        Serie {progress.done}/{progress.planned}
+        {meta.length > 0 && ` · ${meta.join(' · ')}`}
+      </p>
+      {session.notes && <p className="small muted pre-line">{session.notes}</p>}
+      <div className="dy-actions">
+        <button type="button" className="btn btn--outline" onClick={() => onOpenSheet('edit')}>
+          Modifica
+        </button>
+        <button type="button" className="btn btn--outline" onClick={() => reopenSession(date)}>
+          Riapri
+        </button>
+      </div>
+    </section>
+  ) : (
+    <section className="card dy-panel" aria-label="Avanzamento della sessione">
+      <p className="dy-panel__row">
+        <span>Serie fatte</span>
+        <span className="dy-panel__count">
+          {progress.done} / {progress.planned}
+        </span>
+      </p>
+      <div className="dy-progress" aria-hidden="true">
+        <span style={{ width: `${pct}%` }} />
+      </div>
+      <button type="button" className="btn btn--big btn--primary btn--block" onClick={() => onOpenSheet('finish')}>
+        <IconStop />
+        Termina sessione
+      </button>
+    </section>
   )
 }

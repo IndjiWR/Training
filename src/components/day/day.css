@@ -151,6 +151,19 @@
 .dy-info dd {
   margin: 0;
 }
+/* During a session: one line, details on demand, the exercises come up sooner. */
+.dy-head--compact {
+  gap: 0.25rem;
+}
+.dy-head--compact h1 {
+  font-size: 1.25rem;
+}
+.dy-head__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.625rem;
+}
 
 /* ───── session status line ───── */
 .dy-status {
@@ -342,7 +355,279 @@
   font-weight: 700;
 }
 
-/* ───── exercise list ───── */
+/* ───── exercise carousel ───── */
+.dy-carousel {
+  /* Side gutter of .sh-main: the track bleeds into it so the next card peeks in. */
+  --gutter: max(var(--pad), env(safe-area-inset-left, 0rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  scroll-margin-top: calc(var(--safe-top) + 0.25rem);
+}
+
+/* Sticky bar: where am I, how far, list of the day. Sticks only while the carousel is on screen. */
+.dy-nav {
+  position: sticky;
+  top: var(--safe-top);
+  z-index: 20;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.125rem;
+  margin-inline: calc(-1 * var(--gutter));
+  padding: 0.25rem max(0.25rem, calc(var(--gutter) - 0.75rem));
+  border-bottom: 0.0625rem solid var(--border);
+  background: var(--bg);
+}
+.dy-nav__arrow:disabled {
+  opacity: 0.3;
+}
+.dy-nav__center {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0.375rem 0.5rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dy-nav__top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+.dy-nav__count {
+  flex: none;
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+.dy-nav__of {
+  color: var(--text-muted);
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.dy-nav__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dy-nav__list {
+  flex: none;
+  align-self: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  color: var(--text-muted);
+}
+.dy-nav__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.1875rem;
+  min-height: 0.75rem;
+}
+.dy-nav__seg {
+  flex: 1 1 0;
+  height: 0.375rem;
+  border-radius: 999rem;
+  background: var(--surface-3);
+}
+.dy-nav__seg[data-state='started'] {
+  background: var(--accent);
+}
+.dy-nav__seg[data-state='done'] {
+  background: var(--ok);
+}
+.dy-nav__seg[data-current] {
+  height: 0.75rem;
+  box-shadow: 0 0 0 0.125rem var(--text);
+}
+.dy-nav__seg[data-current][data-state='todo'] {
+  background: var(--text-faint);
+}
+/* Gap before the "A casa" group. */
+.dy-nav__seg[data-home] {
+  margin-left: 0.5rem;
+}
+
+.dy-track {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline-start: var(--gutter);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: var(--gutter);
+  scrollbar-width: none;
+  transition: height 0.25s ease;
+}
+.dy-track::-webkit-scrollbar {
+  display: none;
+}
+/* End spacer (padding-inline-end is not always scrollable in flex containers): last slide centres. */
+.dy-track::after {
+  content: '';
+  flex: 0 0 calc(var(--gutter) - 0.5rem);
+  align-self: stretch;
+}
+.dy-slide {
+  display: flex;
+  flex: 0 0 calc(100% - var(--gutter));
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  /* Room for the focus ring of the bottom button (the track clips its overflow). */
+  padding-bottom: 0.375rem;
+  scroll-snap-align: center;
+  scroll-snap-stop: always;
+  transition: opacity 0.2s ease;
+}
+.dy-slide[inert] {
+  opacity: 0.55;
+}
+.dy-slide__nav {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+}
+.dy-slide__prev {
+  flex: none;
+  width: var(--tap-big);
+  min-height: var(--tap-big);
+}
+.dy-slide__next {
+  justify-content: space-between;
+  min-height: var(--tap-big);
+  padding: 0.5rem 0.75rem 0.5rem 1rem;
+  text-align: left;
+}
+.dy-slide__next-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.dy-slide__next-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.dy-slide__next-label svg {
+  width: 1rem;
+  height: 1rem;
+}
+.dy-slide__next-name {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 1rem;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+.dy-slide__finish {
+  min-height: var(--tap-big);
+}
+.dy-slide__end {
+  align-self: center;
+  margin: 0 auto;
+}
+
+/* List of the day (sheet). */
+.dy-jump-group + .dy-jump-group {
+  margin-top: 1rem;
+}
+.dy-jump-group .dy-section {
+  margin: 0 0 0.5rem;
+}
+.dy-jump {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.dy-jump__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  min-height: var(--tap-big);
+  padding: 0.5rem 0.75rem;
+  border: 0.125rem solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.dy-jump__item[aria-current='step'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.dy-jump__pos {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999rem;
+  background: var(--surface-3);
+  font-weight: 800;
+}
+.dy-jump__pos[data-state='started'] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+.dy-jump__pos[data-state='done'] {
+  background: var(--ok);
+  color: var(--on-ok);
+}
+.dy-jump__text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+}
+.dy-jump__name {
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.dy-jump__meta {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+.dy-jump__status {
+  font-size: 0.875rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.dy-jump__status[data-state='done'] {
+  color: var(--ok-text);
+}
+
+/* ───── exercise list (days with nothing to track) ───── */
 .dy-section {
   display: flex;
   align-items: center;
@@ -363,9 +648,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--gap);
-}
-.dy-ex {
-  scroll-margin-top: calc(var(--pad) + var(--safe-top));
 }
 .dy-hidden {
   padding-block: 0.25rem;
@@ -420,7 +702,9 @@
     animation: none;
   }
   .dy-details > summary > svg,
-  .dy-progress > span {
+  .dy-progress > span,
+  .dy-track,
+  .dy-slide {
     transition: none;
   }
 }

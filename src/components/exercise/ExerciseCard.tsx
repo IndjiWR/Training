@@ -5,7 +5,7 @@ import { formatRestRange } from '../../lib/format'
 import { setsDone } from '../../lib/results'
 import { addSet, removeExtraSet, resetExercise, rowCount } from '../../state/actions'
 import type { ElbowLevel, ExerciseLog, SessionLog } from '../../state/types'
-import { IconChevronDown, IconMinus, IconPlus, IconReset, IconTimer } from '../icons'
+import { IconHome, IconMinus, IconPlus, IconReset, IconTimer } from '../icons'
 import { VideoButton } from '../media/VideoButton'
 import { AttemptsTracker } from './AttemptsTracker'
 import { DistanceTracker } from './DistanceTracker'
@@ -26,12 +26,11 @@ export interface ExerciseCardProps {
   session: SessionLog | undefined
   /** True while the elbow check is pending: the card is visible but not interactive. */
   locked: boolean
-  /** Expanded state is controlled by the day screen (auto-advance to the next exercise). */
-  expanded: boolean
-  onToggle: () => void
+  /** "A casa" exercises get a tag in the header. */
+  home?: boolean
 }
 
-/** One exercise: header (name, dose, badges, Video) + tracker for its kind. */
+/** One exercise, always open: header (name, dose, badges, Video) + tracker for its kind. */
 export function ExerciseCard(props: ExerciseCardProps) {
   // Different component types: a plan update that changes the kind remounts cleanly.
   return props.eff.ex.kind === 'info' ? (
@@ -97,7 +96,9 @@ function InfoCard({ eff, locked }: { eff: EffectiveExercise; locked: boolean }) 
       <div className="ex-info">
         <span className="ex-pos num">{position(eff)}</span>
         <div className="ex-head__main">
-          <h3 className="ex-head__name">{ex.name}</h3>
+          <h2 className="ex-head__name" tabIndex={-1}>
+            {ex.name}
+          </h2>
           {meta && <p className="ex-head__meta">{meta}</p>}
           {note && <p className="ex-note">{note}</p>}
         </div>
@@ -113,8 +114,8 @@ function InfoCard({ eff, locked }: { eff: EffectiveExercise; locked: boolean }) 
 
 /* ───────────────────────── tracked card ───────────────────────── */
 
-function TrackedCard({ date, plan, eff, session, locked, expanded, onToggle }: ExerciseCardProps) {
-  const bodyId = useId()
+function TrackedCard({ date, plan, eff, session, locked, home = false }: ExerciseCardProps) {
+  const titleId = useId()
   const [resetKey, setResetKey] = useState(0)
   const { ex, lib } = eff
   const log = session?.exercises[String(eff.index)]
@@ -134,7 +135,6 @@ function TrackedCard({ date, plan, eff, session, locked, expanded, onToggle }: E
     'card',
     'ex-card',
     ex.test && 'ex-card--test',
-    expanded && 'ex-card--open',
     locked && 'ex-card--locked',
     eff.hidden && 'ex-card--hidden',
   ]
@@ -142,83 +142,83 @@ function TrackedCard({ date, plan, eff, session, locked, expanded, onToggle }: E
     .join(' ')
 
   return (
-    <article className={className} data-state={complete ? 'done' : done > 0 ? 'started' : 'todo'}>
-      <h3 className="ex-card__h">
-        <button
-          type="button"
-          className="ex-head"
-          aria-expanded={expanded}
-          aria-controls={bodyId}
-          aria-disabled={locked || undefined}
-          onClick={locked ? undefined : onToggle}
-        >
-          <span className="ex-pos num">{position(eff)}</span>
-          <span className="ex-head__main">
-            <span className="ex-head__name">{ex.name}</span>
-            {meta && <span className="ex-head__meta">{meta}</span>}
-            <span className="ex-head__badges">
-              {ex.test && <span className="badge badge--test">Test</span>}
-              {ex.per_side && <span className="badge ex-badge-lc">dx/sx</span>}
-              {eff.halved && <span className="badge badge--warn ex-badge-lc">½ serie</span>}
-              {eff.hidden && <span className="badge badge--danger ex-badge-lc">saltato</span>}
-              {complete ? (
-                <span className="badge badge--ok ex-badge-lc">✓ fatto</span>
-              ) : (
-                done > 0 && (
-                  <span className="badge badge--accent num">
-                    <span aria-hidden="true">
-                      {done}/{planned}
-                    </span>
-                    <span className="visually-hidden">
-                      {done} {noun} su {planned}
-                    </span>
-                  </span>
-                )
-              )}
-            </span>
-          </span>
-          <IconChevronDown className="ex-head__chev" />
-        </button>
-      </h3>
-
-      <div id={bodyId} className="ex-body" hidden={!expanded} inert={locked}>
-        {expanded && (
-          <>
-            {eff.hidden && eff.hiddenReason && <p className="banner banner--warn small">{HIDDEN_TEXT[eff.hiddenReason]}</p>}
-            {note && <p className="ex-note">{note}</p>}
-            {rest && (
-              <p className="ex-rest">
-                <IconTimer /> Recupero <strong className="num">{rest}</strong>
-              </p>
+    <article
+      className={className}
+      data-state={complete ? 'done' : done > 0 ? 'started' : 'todo'}
+      aria-labelledby={titleId}
+    >
+      <header className="ex-head">
+        <span className="ex-pos num" aria-hidden="true">
+          {complete ? '✓' : position(eff)}
+        </span>
+        <div className="ex-head__main">
+          <h2 id={titleId} className="ex-head__name" tabIndex={-1}>
+            {ex.name}
+          </h2>
+          {meta && <p className="ex-head__meta">{meta}</p>}
+          <p className="ex-head__badges">
+            {home && (
+              <span className="badge ex-badge-lc">
+                <IconHome className="ex-badge-icon" aria-hidden="true" /> A casa
+              </span>
             )}
-            {warmup && <WarmupList warmup={warmup} />}
-            {isCheck ? (
-              <ElbowStatus plan={plan} session={session} />
+            {ex.test && <span className="badge badge--test">Test</span>}
+            {ex.per_side && <span className="badge ex-badge-lc">dx/sx</span>}
+            {eff.halved && <span className="badge badge--warn ex-badge-lc">½ serie</span>}
+            {eff.hidden && <span className="badge badge--danger ex-badge-lc">saltato</span>}
+            {complete ? (
+              <span className="badge badge--ok ex-badge-lc">✓ fatto</span>
             ) : (
-              !eff.hidden && (
-                <>
-                  <Tracker key={resetKey} t={{ date, eff, rows }} log={log} />
-                  <RowControls date={date} eff={eff} log={log} rows={rows} planned={planned} />
-                  {ex.test && <TestNotes date={date} index={eff.index} text={log?.text} />}
-                </>
+              done > 0 && (
+                <span className="badge badge--accent num">
+                  <span aria-hidden="true">
+                    {done}/{planned}
+                  </span>
+                  <span className="visually-hidden">
+                    {done} {noun} su {planned}
+                  </span>
+                </span>
               )
             )}
-            <div className="ex-foot">
-              <VideoButton exKey={ex.key} fallbackQuery={lib?.label ?? ex.name} />
-              {!isCheck && hasData && (
-                <div className="ex-foot__end">
-                  <ResetButton
-                    onConfirm={() => {
-                      // Running holds/countdowns of the cleared rows would come back (or ring) later.
-                      clearExerciseTimers(date, eff.index)
-                      resetExercise(date, eff.index)
-                      setResetKey((k) => k + 1)
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          </>
+          </p>
+        </div>
+      </header>
+
+      <div className="ex-body" inert={locked}>
+        <div className="ex-tools">
+          <VideoButton exKey={ex.key} fallbackQuery={lib?.label ?? ex.name} />
+          {rest && (
+            <p className="ex-rest">
+              <IconTimer aria-hidden="true" /> Recupero <strong className="num">{rest}</strong>
+            </p>
+          )}
+        </div>
+        {eff.hidden && eff.hiddenReason && <p className="banner banner--warn small">{HIDDEN_TEXT[eff.hiddenReason]}</p>}
+        {note && <p className="ex-note">{note}</p>}
+        {isCheck ? (
+          <ElbowStatus plan={plan} session={session} />
+        ) : (
+          !eff.hidden && (
+            <>
+              <Tracker key={resetKey} t={{ date, eff, rows }} log={log} />
+              <RowControls date={date} eff={eff} log={log} rows={rows} planned={planned} />
+              {ex.test && <TestNotes date={date} index={eff.index} text={log?.text} />}
+            </>
+          )
+        )}
+        {/* After the timer: start it, then follow the points while it runs. */}
+        {warmup && <WarmupList warmup={warmup} />}
+        {!isCheck && hasData && (
+          <div className="ex-foot">
+            <ResetButton
+              onConfirm={() => {
+                // Running holds/countdowns of the cleared rows would come back (or ring) later.
+                clearExerciseTimers(date, eff.index)
+                resetExercise(date, eff.index)
+                setResetKey((k) => k + 1)
+              }}
+            />
+          </div>
         )}
       </div>
     </article>
