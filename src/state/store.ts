@@ -80,6 +80,8 @@ function load(): AppData {
 
 let state: AppData = load()
 let persistFailed = false
+// Storage blocked by the browser (cookies/site data disabled): nothing will survive a reload.
+const storageUnavailable = typeof window !== 'undefined' && storage() === null
 const listeners = new Set<() => void>()
 
 function persist(next: AppData): void {
@@ -101,9 +103,12 @@ export function getState(): AppData {
   return state
 }
 
-/** True when the last write to localStorage failed (quota, private mode…). */
+/**
+ * True when the last write to localStorage failed (quota, private mode…) or when localStorage
+ * is not available at all (site data blocked by the browser): data lives in memory only.
+ */
 export function lastPersistFailed(): boolean {
-  return persistFailed
+  return persistFailed || storageUnavailable
 }
 
 export function setState(updater: (s: AppData) => AppData): void {
