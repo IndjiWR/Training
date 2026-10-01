@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, type ComponentType } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, type ComponentType } from 'react'
 import './components/shell/shell.css'
 import { useWorkoutActive } from './components/day/useWorkoutActive'
 import { BottomNav } from './components/shell/BottomNav'
@@ -10,18 +10,27 @@ import { ToastHost } from './components/shell/ToastHost'
 import { UpdatePrompt } from './components/shell/UpdatePrompt'
 import { RestTimerBar } from './components/timers/RestTimerBar'
 import { useWakeLock } from './lib/wakeLock'
-import { ExercisesScreen } from './screens/ExercisesScreen'
-import { SettingsScreen } from './screens/SettingsScreen'
-import { SummaryScreen } from './screens/SummaryScreen'
 import { TodayScreen } from './screens/TodayScreen'
 import { usePlanAutoSync } from './state/planSync'
 import { getState, useAppData } from './state/store'
 
+// Oggi is in the main bundle (it opens first, at the park); the other screens are separate chunks,
+// precached by the service worker for offline use and warmed up once the app is idle.
+const loadExercises = () => import('./screens/ExercisesScreen').then((m) => ({ default: m.ExercisesScreen }))
+const loadSummary = () => import('./screens/SummaryScreen').then((m) => ({ default: m.SummaryScreen }))
+const loadSettings = () => import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen }))
+
 const SCREENS: Record<Route, ComponentType> = {
   oggi: TodayScreen,
-  esercizi: ExercisesScreen,
-  riepilogo: SummaryScreen,
-  impostazioni: SettingsScreen,
+  esercizi: lazy(loadExercises),
+  riepilogo: lazy(loadSummary),
+  impostazioni: lazy(loadSettings),
+}
+
+function preloadScreens(): void {
+  void loadExercises().catch(() => {})
+  void loadSummary().catch(() => {})
+  void loadSettings().catch(() => {})
 }
 
 // Apply the saved theme before the first paint (index.html defaults to dark).
@@ -48,6 +57,16 @@ export function App() {
     document.title = `Training · ${ROUTE_TITLES[route]}`
   }, [route])
 
+  // Warm up the other screens when the app is idle: the first tab switch is then instant.
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      const id = window.requestIdleCallback(preloadScreens, { timeout: 4000 })
+      return () => window.cancelIdleCallback(id)
+    }
+    const id = window.setTimeout(preloadScreens, 1500)
+    return () => window.clearTimeout(id)
+  }, [])
+
   useEffect(() => {
     if (prevRoute.current === route) return
     prevRoute.current = route
@@ -67,7 +86,9 @@ export function App() {
           <UpdatePrompt />
         </div>
         <ErrorBoundary resetKey={route}>
-          <Screen />
+          <Suspense fallback={<p className="muted small">Carico…</p>}>
+            <Screen />
+          </Suspense>
         </ErrorBoundary>
       </main>
       <ErrorBoundary resetKey="rest" silent>
