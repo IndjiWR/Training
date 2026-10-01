@@ -1,7 +1,19 @@
-import { useCallback, useEffect, useId, useRef, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type ReactNode,
+} from 'react'
 import { version as APP_VERSION } from '../../package.json'
-import { IconCheck, IconRefresh, IconTrash, IconUpload, IconWarning } from '../components/icons'
+import { IconCheck, IconChevronRight, IconRefresh, IconTrash, IconUpload, IconWarning } from '../components/icons'
 import { BackupControls } from '../components/shell/BackupControls'
+import { CopyLink, PasteLink } from '../components/shell/DriveLink'
 import { errorText, exportBackup } from '../components/shell/backupActions'
 import { ConfirmSheet } from '../components/shell/ConfirmSheet'
 import { formatDateTime, formatDateTimeAgo } from '../components/shell/datetime'
@@ -20,6 +32,8 @@ const SOURCE_LABEL: Record<PlanSource, string> = {
   file: 'File importato',
   example: 'Esempio',
 }
+
+const SetupGuide = lazy(() => import('../components/shell/SetupGuide').then((m) => ({ default: m.SetupGuide })))
 
 const DRIVE_SECTION_ID = 'st-drive'
 const ENDPOINT_PLACEHOLDER = 'https://script.google.com/macros/s/…/exec'
@@ -205,11 +219,11 @@ function PlanSection() {
         </button>
         {!configured ? (
           <p className="small muted">
-            Per scaricare la scheda da Google Drive inserisci URL e token nel{' '}
+            Per scaricare la scheda da Google Drive serve il{' '}
             <button
               type="button"
               className="st-link"
-              onClick={() => scrollToSection(DRIVE_SECTION_ID, 'input')}
+              onClick={() => scrollToSection(DRIVE_SECTION_ID, 'button')}
             >
               collegamento Google Drive
             </button>
@@ -274,6 +288,86 @@ function PlanSection() {
 
 /* ───────────────────────── b) Collegamento Google Drive ───────────────────────── */
 
+/** Desktop-like pointer: the guided setup (done on a computer) starts open there. */
+function isComputer(): boolean {
+  return typeof window !== 'undefined' && Boolean(window.matchMedia?.('(hover: hover) and (pointer: fine)').matches)
+}
+
+function DriveSection() {
+  const endpoint = useAppData((s) => s.settings.endpoint)
+  const token = useAppData((s) => s.settings.token)
+  const configured = endpoint.trim() !== '' && token.trim() !== ''
+  const [guideOpen] = useState(() => !configured && isComputer())
+  // The guide (with the script text) is loaded only once its section is opened, then kept.
+  const [guideShown, setGuideShown] = useState(guideOpen)
+
+  return (
+    <Section id={DRIVE_SECTION_ID} title="Collegamento Google Drive">
+      <p className="small">
+        {configured ? (
+          <span className="badge badge--ok">
+            <IconCheck aria-hidden="true" className="st-badge-icon" />
+            Collegato
+          </span>
+        ) : (
+          <span className="badge">Non collegato</span>
+        )}
+      </p>
+
+      {configured ? (
+        <>
+          <p className="small muted">
+            La scheda si scarica da sola quando apri l&apos;app e quando torna la connessione.
+          </p>
+          <CopyLink endpoint={endpoint} token={token} />
+          <PasteLink prominent={false} label="Incolla un nuovo collegamento" />
+        </>
+      ) : (
+        <>
+          <p className="small">
+            <strong>Sull&apos;iPhone:</strong> copia il collegamento creato dal computer e tocca il pulsante.
+          </p>
+          <PasteLink />
+        </>
+      )}
+
+      <details
+        className="cx-details"
+        open={guideOpen}
+        onToggle={(e) => {
+          if (e.currentTarget.open) setGuideShown(true)
+        }}
+      >
+        <summary>
+          <IconChevronRight aria-hidden="true" />
+          Crea il collegamento dal computer
+        </summary>
+        <div className="cx-details__body">
+          {guideShown && (
+            <Suspense fallback={<p className="small muted">Carico la guida…</p>}>
+              <SetupGuide />
+            </Suspense>
+          )}
+        </div>
+      </details>
+
+      <details className="cx-details">
+        <summary>
+          <IconChevronRight aria-hidden="true" />
+          Inserisci URL e token a mano
+        </summary>
+        <div className="cx-details__body">
+          <ConnectionSection />
+        </div>
+      </details>
+
+      <p className="small muted">
+        URL e token restano solo su questo dispositivo: mai nel codice dell&apos;app né nel backup.
+      </p>
+    </Section>
+  )
+}
+
 function ConnectionSection() {
   const endpoint = useAppData((s) => s.settings.endpoint)
   const token = useAppData((s) => s.settings.token)
@@ -303,7 +397,6 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
   const dirty = nextUrl !== endpoint || nextTok !== token
   const invalid = check.level === 'error'
   const tokenMissing = urlTrim !== '' && nextTok === ''
-  const configured = endpoint.trim() !== '' && token.trim() !== ''
 
   const persist = () => {
     // The form may not remount (same saved values): show what was saved.
@@ -335,17 +428,6 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
 
   return (
     <form className="stack" onSubmit={(e) => void saveAndRefresh(e)} noValidate>
-      <p className="small">
-        {configured ? (
-          <span className="badge badge--ok">
-            <IconCheck aria-hidden="true" className="st-badge-icon" />
-            Configurato
-          </span>
-        ) : (
-          <span className="badge">Non configurato</span>
-        )}
-      </p>
-
       <div className="field">
         <label htmlFor={urlId}>URL della Web app (Apps Script)</label>
         <input
@@ -404,9 +486,6 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
         )}
       </div>
 
-      <p className="small muted">
-        Salvati solo su questo dispositivo, mai nel codice dell&apos;app. URL e token non finiscono nel backup.
-      </p>
       {dirty && <p className="small st-dirty">Modifiche non salvate</p>}
 
       <div className="st-buttons">
@@ -697,9 +776,7 @@ export function SettingsScreen() {
     <div className="st-screen stack">
       <h1>Impostazioni</h1>
       <PlanSection />
-      <Section id={DRIVE_SECTION_ID} title="Collegamento Google Drive">
-        <ConnectionSection />
-      </Section>
+      <DriveSection />
       <PreferencesSection />
       <Section title="Backup">
         <BackupControls />

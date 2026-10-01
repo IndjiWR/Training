@@ -150,6 +150,17 @@ export const IconHome = (p: IconProps) => (
     <path d="M4 11l8-7 8 7v9h-5v-6H9v6H4z" />
   </Svg>
 )
+export const IconPaste = (p: IconProps) => (
+  <Svg {...p}>
+    <rect x="5" y="4.5" width="14" height="16" rx="2" />
+    <path d="M9 4.5V3h6v1.5M9 11h6M9 15h4" />
+  </Svg>
+)
+export const IconLink = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1" />
+  </Svg>
+)
 export const IconTrash = (p: IconProps) => (
   <Svg {...p}>
     <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />

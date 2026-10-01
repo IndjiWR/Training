@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react'
 import { parsePlan, type Plan } from '../plan/schema'
 import { nowISO, TIME_ZONE } from '../lib/date'
 import { fetchPlan, isNewerPlan, readPlanFile, type FetchPlanResult } from '../lib/sync'
-import { setPlan, setPlanMeta } from './actions'
+import { setPlan, setPlanMeta, updateSettings } from './actions'
 import { getState, subscribe } from './store'
 import type { SessionLog } from './types'
 import { toast, type Toast } from './ui'
@@ -243,6 +243,26 @@ export async function refreshPlan(opts: { manual: boolean }): Promise<void> {
   inFlight = run
   emitSyncing()
   return run
+}
+
+export type ConnectOutcome = 'ok' | 'offline' | 'error'
+
+/**
+ * Saves a new collegamento (endpoint + token) and downloads the plan right away. The outcome is
+ * also toasted by refreshPlan; 'error' leaves the details in planMeta.lastError.
+ */
+export async function connectDrive(endpoint: string, token: string): Promise<ConnectOutcome> {
+  // A refresh already running uses the previous settings: let it finish, then fetch again.
+  if (inFlight) await inFlight.catch(() => undefined)
+  updateSettings({ endpoint, token })
+  if (isOffline()) {
+    toast('Collegamento salvato. Sei offline: scarico la scheda appena torna la connessione.', { tone: 'info' })
+    return 'offline'
+  }
+  const before = getState().planMeta.lastCheckAt
+  await refreshPlan({ manual: true })
+  const meta = getState().planMeta
+  return meta.lastError === null && meta.lastCheckAt !== before ? 'ok' : 'error'
 }
 
 /** Auto sync: once on app open and on every 'online' event. Call once from the app shell. */
