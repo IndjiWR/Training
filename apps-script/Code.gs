@@ -10,7 +10,9 @@
  * Configuration lives only in Script Properties (Project Settings -> Script Properties):
  *   FOLDER_ID  id of the Drive folder that holds the scheda-*.json files
  *   TOKEN      long random shared secret, the same one entered in the app (Impostazioni)
- * Never hardcode them here.
+ * Never hardcode them in this file. The app's guided setup (Impostazioni -> "Crea il collegamento
+ * dal computer") copies this code with two SETUP_* constants on top: run setup() once and they
+ * are stored in the Script Properties.
  *
  * The app calls this with a plain GET without custom headers: Apps Script cannot answer a
  * CORS preflight, while simple GETs (and the redirect to googleusercontent.com) work.
@@ -54,8 +56,35 @@ function doGet(e) {
 }
 
 /**
+ * First setup, once (select "setup" -> Esegui): saves the SETUP_FOLDER_ID / SETUP_TOKEN constants
+ * prepared by the app into the Script Properties, asks for the Drive permission and checks the
+ * folder. Without the constants it only explains what to do: nothing is overwritten.
+ */
+function setup() {
+  const folderId = typeof SETUP_FOLDER_ID === 'string' ? SETUP_FOLDER_ID.trim() : '';
+  const token = typeof SETUP_TOKEN === 'string' ? SETUP_TOKEN.trim() : '';
+  if (!folderId || !token) {
+    console.log(
+      'Mancano SETUP_FOLDER_ID e SETUP_TOKEN in cima al codice. Copia il codice da Training → ' +
+        'Impostazioni → «Crea il collegamento dal computer», oppure imposta FOLDER_ID e TOKEN a mano ' +
+        'nelle Proprietà script e usa checkSetup.'
+    );
+    return;
+  }
+  PropertiesService.getScriptProperties().setProperties({ FOLDER_ID: folderId, TOKEN: token });
+  console.log('Proprietà script salvate (FOLDER_ID e TOKEN).');
+  if (checkSetup()) {
+    console.log(
+      'Pronto. Ora pubblica: Esegui il deployment → Nuovo deployment → Applicazione web ' +
+        '(Esegui come: Me · Chi può accedere: Chiunque) e incolla nell’app l’URL che finisce con /exec.'
+    );
+  }
+}
+
+/**
  * Run this from the editor (select "checkSetup" -> Esegui) to grant the Drive permission and
  * check the configuration. The log shows which file the web app would serve; never the token.
+ * Returns true when the web app would serve a valid plan.
  */
 function checkSetup() {
   const props = PropertiesService.getScriptProperties();
@@ -65,26 +94,28 @@ function checkSetup() {
   if (token && token.length < 24) console.warn('TOKEN troppo corto: usa almeno 32 caratteri casuali.');
   if (!folderId) {
     console.log('FOLDER_ID: MANCANTE');
-    return;
+    return false;
   }
   const folder = openFolder_(folderId);
   if (!folder) {
     console.log('FOLDER_ID: cartella non trovata o non accessibile con questo account.');
-    return;
+    return false;
   }
   console.log('Cartella: ' + folder.getName());
   const file = findLatestPlan_(folder);
   if (!file) {
     console.log('Nessun file scheda-AAAA-MM-GG.json nella cartella.');
-    return;
+    return false;
   }
-  let status = 'JSON valido';
+  let valid = true;
   try {
     JSON.parse(readText_(file));
   } catch (parseError) {
-    status = 'JSON NON valido';
+    valid = false;
   }
+  const status = valid ? 'JSON valido' : 'JSON NON valido';
   console.log('Scheda servita: ' + file.getName() + ' (' + status + ', modificata ' + file.getLastUpdated() + ')');
+  return Boolean(token) && valid;
 }
 
 /** Folder by id, or null when the id is wrong or the deploying account cannot read it. */
