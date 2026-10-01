@@ -1,0 +1,429 @@
+/* "Oggi" — day view, session flow, elbow check, day log (prefix dy-). */
+
+.dy-screen {
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--pad);
+  padding-top: calc(var(--pad) + var(--safe-top));
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* ───── collapsible <details> ───── */
+.dy-details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap);
+  font-weight: 700;
+  cursor: pointer;
+  list-style: none;
+  touch-action: manipulation;
+}
+.dy-details > summary::-webkit-details-marker {
+  display: none;
+}
+.dy-details > summary > svg {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  transition: transform 0.15s ease;
+}
+.dy-details[open] > summary > svg {
+  transform: rotate(90deg);
+}
+.dy-details__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-bottom: 0.25rem;
+}
+
+/* ───── plan strip ───── */
+.dy-plan {
+  display: flex;
+  flex-direction: column;
+}
+.dy-plan__title {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.dy-plan .dy-details > summary {
+  font-size: 0.9375rem;
+  color: var(--text-muted);
+}
+.dy-goals {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+/* ───── day picker ───── */
+.dy-picker {
+  position: relative;
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--pad);
+  margin-inline: calc(-1 * var(--pad));
+  padding: 0.25rem var(--pad) 0.5rem;
+  scrollbar-width: none;
+}
+.dy-picker::-webkit-scrollbar {
+  display: none;
+}
+.dy-daychip {
+  position: relative;
+  flex: none;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.125rem;
+  min-width: 5.75rem;
+  min-height: var(--tap-big);
+  padding: 0.5rem 0.875rem;
+  border-radius: var(--radius-sm);
+  line-height: 1.15;
+  text-align: left;
+  scroll-snap-align: center;
+  touch-action: manipulation;
+}
+.dy-daychip[data-today] {
+  border-color: var(--accent);
+}
+.dy-daychip__today {
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.dy-daychip__date {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dy-daychip__type {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.dy-daychip__mark {
+  color: var(--ok);
+  font-weight: 800;
+}
+.dy-daychip[aria-pressed='true'] .dy-daychip__today,
+.dy-daychip[aria-pressed='true'] .dy-daychip__type,
+.dy-daychip[aria-pressed='true'] .dy-daychip__mark {
+  color: inherit;
+}
+
+/* ───── day header ───── */
+.dy-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.dy-head h1 {
+  font-size: 1.75rem;
+}
+.dy-head__title {
+  font-size: 1.125rem;
+  font-weight: 700;
+}
+.dy-info {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: baseline;
+  gap: 0.25rem 0.875rem;
+  margin: 0;
+}
+.dy-info > div {
+  display: contents;
+}
+.dy-info dt {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.dy-info dd {
+  margin: 0;
+}
+
+/* ───── session status line ───── */
+.dy-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+.dy-status__live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dy-status__live::before {
+  content: '';
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--ok);
+  animation: dy-pulse 1.6s ease-in-out infinite;
+}
+.dy-status__done {
+  color: var(--ok);
+}
+.dy-status__wake {
+  font-weight: 600;
+  color: var(--text-muted);
+}
+@keyframes dy-pulse {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* ───── elbow: stop rule, gate, banner, sheet ───── */
+.dy-stop {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+}
+.dy-stop > svg {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.0625rem;
+  color: var(--danger);
+}
+.dy-gate {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  border: 0.1875rem solid var(--warn);
+}
+.dy-gate__intro {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.dy-step {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.dy-step__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.5rem;
+}
+.dy-hang-done {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 700;
+}
+.dy-hang-done > svg {
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--ok);
+}
+.dy-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.dy-level {
+  font-weight: 800;
+}
+.dy-anchor {
+  scroll-margin-top: calc(var(--pad) + var(--safe-top));
+}
+.dy-elbow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.dy-elbow__head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dy-elbow__title {
+  flex: 1 1 auto;
+  font-size: 1.0625rem;
+  font-weight: 800;
+}
+.dy-elbow__manual {
+  font-weight: 600;
+}
+.dy-changes {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9375rem;
+}
+.dy-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.dy-chips .chip {
+  min-height: var(--tap);
+  touch-action: manipulation;
+}
+
+/* ───── session panels ───── */
+.dy-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.dy-panel__row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.dy-panel__count {
+  margin-left: auto;
+  font-size: 1.375rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.dy-progress {
+  height: 0.625rem;
+  border-radius: 999rem;
+  background: var(--surface-3);
+  overflow: hidden;
+}
+.dy-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ok);
+  transition: width 0.3s ease;
+}
+.dy-done-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ok);
+}
+.dy-done-title > svg {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+.dy-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+}
+.dy-skipped {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dy-skipped > p {
+  flex: 1 1 auto;
+  font-weight: 700;
+}
+
+/* ───── exercise list ───── */
+.dy-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.dy-section > svg {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.dy-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.dy-ex {
+  scroll-margin-top: calc(var(--pad) + var(--safe-top));
+}
+.dy-hidden {
+  padding-block: 0.25rem;
+}
+.dy-hidden ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+/* ───── score block (heading + grid + hint) ───── */
+.dy-score {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.dy-score__head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: var(--tap);
+}
+.dy-score__head > h3 {
+  flex: 1 1 auto;
+}
+.dy-field-hint {
+  margin-top: -0.25rem;
+}
+
+/* ───── empty plan ───── */
+.dy-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+.dy-file {
+  position: relative;
+}
+.dy-file:focus-within {
+  outline: 0.1875rem solid var(--accent);
+  outline-offset: 0.125rem;
+}
+.dy-file[aria-disabled='true'] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dy-status__live::before {
+    animation: none;
+  }
+  .dy-details > summary > svg,
+  .dy-progress > span {
+    transition: none;
+  }
+}
