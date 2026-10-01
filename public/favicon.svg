@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+<title>Training</title>
+  <rect x="0" y="0" width="512" height="512" rx="115.2" fill="#0b0d10"/>
+  <path d="M104.56 422.39 L104.56 89.61 L407.44 89.61 L407.44 422.39" fill="none" stroke="#4cc9ff" stroke-width="35.87" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M166.33 89.61 L214.15 201.2" fill="none" stroke="#f5f7fa" stroke-width="31.88" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M345.67 89.61 L297.85 201.2" fill="none" stroke="#f5f7fa" stroke-width="31.88" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="256" cy="147.4" r="28.89" fill="#f5f7fa"/>
+  <polygon points="208.18,201.2 303.82,201.2 278.92,292.86 233.08,292.86" fill="#f5f7fa" stroke="#f5f7fa" stroke-width="27.9" stroke-linejoin="round"/>
+  <path d="M243.05 288.88 L234.08 400.47" fill="none" stroke="#f5f7fa" stroke-width="31.88" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M268.95 288.88 L277.92 400.47" fill="none" stroke="#f5f7fa" stroke-width="31.88" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
