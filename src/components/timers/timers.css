@@ -1,0 +1,458 @@
+/*
+ * Timers: hold count-up, countdown, global rest dock. Prefix tm-.
+ * Built for the park: huge tabular digits, full-width tap areas, strong state colours
+ * (always paired with text), relative units only.
+ */
+
+/* ───── shared ───── */
+.tm-hold,
+.tm-cd {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.tm-stage__label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.tm-status {
+  min-height: 1.4em;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.tm-bar {
+  display: block;
+  width: 100%;
+  height: 0.75rem;
+  overflow: hidden;
+  border-radius: 999rem;
+  background: var(--surface-3);
+}
+.tm-bar__fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.25s linear;
+}
+
+.tm-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.tm-actions .btn {
+  min-width: 0;
+  padding-inline: 0.75rem;
+}
+
+/* ───── hold: idle ───── */
+.tm-go {
+  min-height: 5rem;
+  font-size: 1.625rem;
+  flex-wrap: wrap;
+  column-gap: 0.625rem;
+}
+.tm-go__label {
+  font-size: 1.0625rem;
+  font-weight: 700;
+  opacity: 0.85;
+}
+.tm-target {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+.tm-target strong {
+  color: var(--text);
+  font-size: 1.125rem;
+}
+
+/* ───── hold: preparation + run stage ───── */
+.tm-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: clamp(15rem, 44dvh, 24rem);
+  margin: 0;
+  padding: 1rem 1rem 1.25rem;
+  border: 0.1875rem solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: center;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+}
+button.tm-stage {
+  cursor: pointer;
+}
+button.tm-stage:active {
+  transform: scale(0.985);
+}
+
+.tm-stage--prep {
+  border-color: var(--warn);
+}
+.tm-prepnum {
+  font-size: clamp(6rem, 42vw, 12rem);
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--warn);
+  animation: tm-pop 0.45s ease-out;
+}
+
+.tm-big {
+  font-size: clamp(5rem, 34vw, 10rem);
+}
+.tm-unit {
+  margin-left: 0.08em;
+  font-size: 0.35em;
+  font-weight: 800;
+}
+
+.tm-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+  padding: 0.5rem 1.125rem;
+  border-radius: 999rem;
+  background: var(--surface-3);
+  background: color-mix(in srgb, currentColor 14%, transparent);
+  font-size: 1.125rem;
+  font-weight: 800;
+}
+.tm-hint svg {
+  width: 1.25em;
+  height: 1.25em;
+}
+
+/* Inside the target band: the whole stage turns green (text says "Nel range"). */
+.tm-stage[data-zone='in'] {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--on-ok);
+}
+.tm-stage[data-zone='in'] .tm-stage__label {
+  color: inherit;
+}
+/* Above the max: accent outline + text ("Oltre il massimo"). */
+.tm-stage[data-zone='over'] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.tm-stage[data-zone='over'] .tm-big,
+.tm-stage[data-zone='over'] .tm-status {
+  color: var(--accent);
+}
+
+.tm-cancel {
+  align-self: center;
+  min-width: 9rem;
+  color: var(--text-muted);
+}
+
+/* Target scale: 0 … max, band outlined, elapsed filled. */
+.tm-scale {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 30rem;
+  height: 1.125rem;
+  margin: 0.375rem 0 1.75rem;
+  border-radius: 999rem;
+  background: var(--surface-3);
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+.tm-scale__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0.85;
+  transition: width 0.1s linear;
+}
+.tm-stage[data-zone='over'] .tm-scale__fill {
+  background: var(--accent);
+  opacity: 1;
+}
+.tm-scale__band {
+  position: absolute;
+  top: -0.3125rem;
+  bottom: -0.3125rem;
+  min-width: 0.375rem;
+  border: 0.1875rem solid var(--ok);
+  border-radius: 0.375rem;
+}
+.tm-scale__band[data-open='true'] {
+  border-right-style: dashed;
+}
+.tm-stage[data-zone='in'] .tm-scale__band {
+  border-color: currentColor;
+}
+.tm-scale__mark {
+  position: absolute;
+  top: 100%;
+  margin-top: 0.4375rem;
+  transform: translateX(-50%);
+  font-size: 0.9375rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ───── countdown ───── */
+.tm-cd__idle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+.tm-cd__total {
+  font-size: 2.75rem;
+  font-weight: 800;
+  line-height: 1;
+}
+.tm-cd__name {
+  font-weight: 700;
+  color: var(--text-muted);
+}
+.tm-cd__display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 1rem 1rem 0.875rem;
+  border: 0.1875rem solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+}
+.tm-cd[data-state='paused'] .tm-cd__display {
+  border-color: var(--border-strong);
+}
+.tm-cd[data-state='paused'] .tm-cd__time {
+  color: var(--text-muted);
+}
+.tm-cd[data-state='paused'] .tm-bar__fill {
+  background: var(--text-faint);
+}
+.tm-cd[data-state='done'] .tm-cd__display {
+  border-color: var(--ok);
+}
+.tm-cd__time[data-final='true'] {
+  color: var(--warn);
+}
+.tm-cd__of {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+/* ───── global dock: countdown chips + rest bar ───── */
+.tm-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--nav-h) + var(--safe-bottom));
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  max-width: 40rem;
+  margin-inline: auto;
+  padding: 0 0.5rem 0.25rem;
+  pointer-events: none;
+}
+.tm-dock > * {
+  pointer-events: auto;
+}
+.tm-dock > .tm-chips {
+  pointer-events: none;
+}
+
+.tm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.375rem;
+}
+.tm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: 0 0.875rem;
+  border: 0.125rem solid var(--border-strong);
+  border-radius: 999rem;
+  background: var(--surface-3);
+  color: var(--text);
+  box-shadow: var(--shadow);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  pointer-events: auto;
+}
+.tm-chip[data-final='true'] {
+  border-color: var(--warn);
+}
+.tm-chip__label {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-chip--done {
+  min-height: var(--tap);
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--on-ok);
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.tm-chip--done svg {
+  width: 1.125em;
+  height: 1.125em;
+  flex: none;
+}
+
+.tm-rest {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'info info'
+    'time actions'
+    'bar bar';
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  /* Fits the 7rem the shell reserves above the nav. */
+  padding: 0.5rem 0.75rem 0.625rem;
+  border: 0.125rem solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+.tm-rest__info {
+  grid-area: info;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.2;
+}
+.tm-rest__label {
+  overflow: hidden;
+  min-width: 0;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tm-rest__range {
+  flex: none;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.tm-rest__time {
+  grid-area: time;
+  font-size: clamp(2.75rem, 14vw, 3.25rem);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+.tm-rest[data-final='true'] {
+  border-color: var(--warn);
+}
+.tm-rest[data-final='true'] .tm-rest__time {
+  color: var(--warn);
+}
+.tm-rest__actions {
+  grid-area: actions;
+  display: flex;
+  gap: 0.5rem;
+}
+.tm-rest__actions .btn {
+  min-width: 4.25rem;
+  padding-inline: 0.875rem;
+  font-size: 1.125rem;
+}
+.tm-rest__bar {
+  grid-area: bar;
+  height: 0.375rem;
+}
+.tm-rest[data-final='true'] .tm-bar__fill {
+  background: var(--warn);
+}
+
+.tm-rest--done {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  width: 100%;
+  min-height: 5.5rem;
+  border-color: var(--ok);
+  background: var(--ok);
+  color: var(--on-ok);
+  font: inherit;
+  text-align: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  animation: tm-pop 0.6s ease-out 3;
+}
+.tm-rest__go {
+  font-size: 1.625rem;
+  font-weight: 900;
+  line-height: 1.15;
+}
+.tm-rest__sub {
+  font-size: 0.9375rem;
+  font-weight: 700;
+}
+
+@keyframes tm-pop {
+  0% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tm-prepnum,
+  .tm-rest--done {
+    animation: none;
+  }
+  .tm-bar__fill,
+  .tm-scale__fill {
+    transition: none;
+  }
+  button.tm-stage:active {
+    transform: none;
+  }
+}
