@@ -5,6 +5,7 @@ import { BackupControls } from '../components/shell/BackupControls'
 import { errorText, exportBackup } from '../components/shell/backupActions'
 import { ConfirmSheet } from '../components/shell/ConfirmSheet'
 import { formatDateTime, formatDateTimeAgo } from '../components/shell/datetime'
+import { splitEndpointToken } from '../components/shell/endpoint'
 import { useOnline } from '../components/shell/online'
 import { alertEnd, unlockAudio } from '../lib/feedback'
 import { clearAllData, updateSettings } from '../state/actions'
@@ -54,7 +55,10 @@ function checkEndpoint(raw: string): EndpointCheck {
     return { level: 'error', message: "Serve un indirizzo sicuro che inizi con https://" }
   }
   if (url.searchParams.has('token')) {
-    return { level: 'warn', message: "Togli «?token=…» dall'URL: il token va nel campo qui sotto." }
+    return {
+      level: 'warn',
+      message: "Al salvataggio «?token=…» viene tolto dall'URL: il token resta solo nel campo qui sotto.",
+    }
   }
   if (/\/dev\/?$/.test(url.pathname)) {
     return {
@@ -291,12 +295,22 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
   const urlTrim = url.trim()
   const tokTrim = tok.trim()
   const check = checkEndpoint(urlTrim)
-  const dirty = urlTrim !== endpoint || tokTrim !== token
+  // What gets saved: a token pasted inside the URL never stays in the endpoint (it would reach
+  // backups); it fills the token field when that is empty.
+  const pasted = splitEndpointToken(urlTrim)
+  const nextUrl = pasted.endpoint
+  const nextTok = tokTrim || pasted.token || ''
+  const dirty = nextUrl !== endpoint || nextTok !== token
   const invalid = check.level === 'error'
-  const tokenMissing = urlTrim !== '' && tokTrim === ''
+  const tokenMissing = urlTrim !== '' && nextTok === ''
   const configured = endpoint.trim() !== '' && token.trim() !== ''
 
-  const persist = () => updateSettings({ endpoint: urlTrim, token: tokTrim })
+  const persist = () => {
+    // The form may not remount (same saved values): show what was saved.
+    setUrl(nextUrl)
+    setTok(nextTok)
+    updateSettings({ endpoint: nextUrl, token: nextTok })
+  }
 
   const save = () => {
     if (invalid || !dirty) return
@@ -308,7 +322,7 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
     e?.preventDefault()
     if (invalid) return
     if (dirty) persist()
-    if (!urlTrim || !tokTrim) {
+    if (!nextUrl || !nextTok) {
       toast('Inserisci URL e token per scaricare la scheda.', { tone: 'warn' })
       return
     }
@@ -391,7 +405,7 @@ function ConnectionForm({ endpoint, token }: { endpoint: string; token: string }
       </div>
 
       <p className="small muted">
-        Salvati solo su questo dispositivo, mai nel codice dell&apos;app. Il token non finisce nel backup.
+        Salvati solo su questo dispositivo, mai nel codice dell&apos;app. URL e token non finiscono nel backup.
       </p>
       {dirty && <p className="small st-dirty">Modifiche non salvate</p>}
 
@@ -599,8 +613,8 @@ function DataSection() {
 
       {writeFailed && (
         <p className="banner banner--danger small" role="alert">
-          L&apos;ultimo salvataggio sul dispositivo non è riuscito (memoria piena o navigazione privata). Esporta
-          subito un backup.
+          Il salvataggio sul dispositivo non riesce (memoria piena, navigazione privata o dati dei siti bloccati
+          dal browser): chiudendo l&apos;app perderesti le ultime modifiche. Esporta subito un backup.
         </p>
       )}
 

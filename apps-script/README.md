@@ -11,7 +11,7 @@ che si chiama `scheda-AAAA-MM-GG.json` (ordinato per nome: la data nel nome deci
 L'ID della cartella e il token **non sono nel codice**: si impostano nelle *Proprietà script*.
 
 > **Mai nel repository**: non fare commit, screenshot o issue con l'URL `/exec` o con il token.
-> L'app li salva solo sul telefono (Impostazioni) e il backup dei dati non contiene il token.
+> L'app li salva solo sul telefono (Impostazioni): il backup dei dati non contiene né l'URL né il token.
 
 ---
 

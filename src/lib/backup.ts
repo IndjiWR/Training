@@ -10,7 +10,7 @@ export interface BackupFile {
   format: typeof BACKUP_FORMAT
   version: typeof BACKUP_VERSION
   exportedAt: string
-  /** AppData with settings.token blanked (the token never leaves the device). */
+  /** AppData with settings.endpoint and settings.token blanked (neither ever leaves the device). */
   data: AppData
 }
 
@@ -119,13 +119,13 @@ const BackupDataSchema = z.object({
 
 /* ───────────────────────── API ───────────────────────── */
 
-/** Serialises the whole app data (sessions, day logs, plan, pins, settings without token). */
+/** Serialises the whole app data (sessions, day logs, plan, pins, settings without endpoint and token). */
 export function createBackup(data: AppData, exportedAt: string): BackupFile {
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt,
-    data: { ...data, settings: { ...data.settings, token: '' } },
+    data: { ...data, settings: { ...data.settings, endpoint: '', token: '' } },
   }
 }
 
@@ -141,7 +141,8 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 /**
  * Validates a parsed backup (zod; loose on inner records but strict on format/version and on
  * the top-level shape) and returns normalised AppData. The token in the result is
- * `currentToken` (backups never carry it). Never throws.
+ * `currentToken` (backups never carry it); the endpoint is whatever the file has, '' for every
+ * backup created by createBackup (callers keep the device's own endpoint then). Never throws.
  */
 export function parseBackup(
   json: unknown,
