@@ -77,16 +77,27 @@ function sampleData(): AppData {
 const roundTrip = (v: unknown): unknown => JSON.parse(JSON.stringify(v))
 
 describe('createBackup', () => {
-  it('wraps the data with format/version and blanks the token', () => {
+  it('wraps the data with format/version and blanks the endpoint and the token', () => {
     const data = sampleData()
     const b = createBackup(data, '2026-10-04T09:45:00.000Z')
     expect(b.format).toBe(BACKUP_FORMAT)
     expect(b.version).toBe(1)
     expect(b.exportedAt).toBe('2026-10-04T09:45:00.000Z')
     expect(b.data.settings.token).toBe('')
+    expect(b.data.settings.endpoint).toBe('')
     expect(JSON.stringify(b)).not.toContain('super-secret')
+    expect(JSON.stringify(b)).not.toContain('script.google.com')
     // The source data is not mutated.
     expect(data.settings.token).toBe('super-secret')
+    expect(data.settings.endpoint).toBe('https://script.google.com/macros/s/X/exec')
+  })
+
+  it('never exports a token pasted inside the endpoint URL', () => {
+    const data = sampleData()
+    data.settings.endpoint = 'https://script.google.com/macros/s/X/exec?token=leaked-secret'
+    const json = JSON.stringify(createBackup(data, 'x'))
+    expect(json).not.toContain('leaked-secret')
+    expect(json).not.toContain('macros/s/X')
   })
 
   it('names the file after the day', () => {
@@ -95,12 +106,12 @@ describe('createBackup', () => {
 })
 
 describe('parseBackup', () => {
-  it('round-trips sessions, day logs, pins, plan and settings; token comes from the device', () => {
+  it('round-trips sessions, day logs, pins, plan and settings; endpoint blank, token from the device', () => {
     const data = sampleData()
     const r = parseBackup(roundTrip(createBackup(data, '2026-10-04T09:45:00.000Z')), 'device-token')
     expect(r.ok).toBe(true)
     if (!r.ok) return
-    expect(r.data.settings).toEqual({ ...data.settings, token: 'device-token' })
+    expect(r.data.settings).toEqual({ ...data.settings, endpoint: '', token: 'device-token' })
     expect(r.data.sessions).toEqual(data.sessions)
     expect(r.data.days).toEqual(data.days)
     expect(r.data.pins).toEqual(data.pins)

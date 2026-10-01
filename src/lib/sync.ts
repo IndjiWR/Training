@@ -51,13 +51,39 @@ export function buildPlanUrl(endpoint: string, token: string): string {
     throw new Error('Stai usando l’URL di test (/dev): copia quello del deploy che termina con /exec.')
   }
   // Keep the existing query verbatim, replacing any previous token parameter.
-  const params = url.search
-    .replace(/^\?/, '')
-    .split('&')
-    .filter((part) => part !== '' && part !== 'token' && !part.startsWith('token='))
+  const params = queryWithoutToken(url.search)
   params.push(`token=${encodeURIComponent(token.trim())}`)
   url.search = `?${params.join('&')}`
   url.hash = ''
+  return url.toString()
+}
+
+const isTokenParam = (part: string): boolean => part === 'token' || part.startsWith('token=')
+
+/** The non-empty parts of a query string (with or without '?'), verbatim, minus any token parameter. */
+function queryWithoutToken(search: string): string[] {
+  return search
+    .replace(/^\?/, '')
+    .split('&')
+    .filter((part) => part !== '' && !isTokenParam(part))
+}
+
+/**
+ * The endpoint (trimmed) without any `token` query parameter, e.g. a URL copied from the address
+ * bar after opening …/exec?token=…: the secret must never be stored in settings.endpoint.
+ * Input without a token parameter, or not a URL at all, is returned trimmed and otherwise unchanged.
+ */
+export function stripTokenParam(endpoint: string): string {
+  const raw = endpoint.trim()
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    return raw
+  }
+  if (!url.search.replace(/^\?/, '').split('&').some(isTokenParam)) return raw
+  const params = queryWithoutToken(url.search)
+  url.search = params.length > 0 ? `?${params.join('&')}` : ''
   return url.toString()
 }
 

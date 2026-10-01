@@ -145,8 +145,9 @@ Apri <https://indjiwr.github.io/Training/> con la connessione attiva, poi:
 - **iPhone (Safari)**: **Condividi → «Aggiungi alla schermata Home»**.
 
 Dopo il primo caricamento l'app funziona anche senza rete. Su iPhone l'app installata ha dati
-separati da Safari: configura l'endpoint (o importa il backup) dall'app installata. Safari su
-iPhone non supporta la vibrazione: resta il beep.
+separati da Safari: dall'app installata configura URL e token dell'endpoint (il backup non li
+contiene) ed eventualmente importa il backup. Safari su iPhone non supporta la vibrazione: resta
+il beep.
 
 Il service worker è in modalità *prompt*: una nuova versione pubblicata non ricarica mai la pagina
 da sola, così non interrompe un allenamento in corso.
@@ -167,7 +168,8 @@ Configurazione (guida passo passo in [`apps-script/README.md`](apps-script/READM
 3. **Esegui il deployment → Nuovo deployment → App web**, con *Esegui come: Me* e *Chi ha accesso:
    Chiunque* (in inglese *Execute as: Me*, *Who has access: Anyone*); autorizza l'accesso a Drive e
    copia l'URL che termina con `/exec`.
-4. Nell'app, in **Impostazioni**, incolla l'URL `/exec` e il token, poi tocca **Aggiorna scheda**.
+4. Nell'app, in **Impostazioni**, incolla l'URL `/exec` (senza `?token=…`) e, nel suo campo, il
+   token, poi tocca **Aggiorna scheda**.
 
 L'app scarica la scheda con una GET semplice, senza header personalizzati (Apps Script non risponde
 al preflight CORS), passando il token come parametro `?token=`. Senza endpoint resta sempre
@@ -232,7 +234,8 @@ solo su questo dispositivo: cancellando i dati del sito si perdono.
 - **Esporta** da **Riepilogo** o **Impostazioni**: scarica `training-backup-AAAA-MM-GG.json` con
   tutti i dati, media fissati compresi (ma senza URL dell'endpoint e token).
 - **Importa** lo stesso file per ripristinare i dati, ad esempio su un altro telefono; il file
-  viene validato prima di sostituire i dati attuali.
+  viene validato prima di sostituire i dati attuali. URL dell'endpoint e token restano quelli già
+  configurati sul dispositivo.
 
 ## Struttura del progetto
 

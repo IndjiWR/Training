@@ -8,6 +8,7 @@ import { IconDownload, IconUpload } from '../icons'
 import { exportBackup, errorText } from './backupActions'
 import { ConfirmSheet } from './ConfirmSheet'
 import { formatDateTime } from './datetime'
+import { splitEndpointToken } from './endpoint'
 
 interface PendingImport {
   data: AppData
@@ -28,7 +29,8 @@ function readExportedAt(json: unknown): string | null {
 }
 
 /**
- * "Esporta backup" / "Importa backup" (sessions, day logs, plan, pinned media; never the token).
+ * "Esporta backup" / "Importa backup" (sessions, day logs, plan, pinned media, preferences; never
+ * the endpoint or the token).
  * Import asks for confirmation before replacing everything on this device.
  */
 export function BackupControls() {
@@ -76,13 +78,15 @@ export function BackupControls() {
     if (!pending) return
     const current = getState().settings
     const { data } = pending
-    // The device keeps its own connection when the backup carries none.
+    // The device keeps its own connection when the backup carries none (new backups never do;
+    // an older one may hold the URL, even with "?token=…" inside: never store that in the endpoint).
+    const imported = splitEndpointToken(data.settings.endpoint)
     replaceAllData({
       ...data,
       settings: {
         ...data.settings,
-        endpoint: data.settings.endpoint || current.endpoint,
-        token: data.settings.token || current.token,
+        endpoint: imported.endpoint || current.endpoint,
+        token: data.settings.token || current.token || imported.token || '',
       },
     })
     stopRest()
@@ -103,7 +107,7 @@ export function BackupControls() {
     <div className="stack-sm sh-backup">
       <p className="small muted">
         Il backup è un file JSON con sessioni, diario (peso, sonno, gomito), scheda attuale, media fissati e
-        preferenze (compreso l&apos;URL di Drive). Non contiene mai il token.
+        preferenze (tema, suoni, vibrazione). Non contiene mai l&apos;URL di Drive né il token.
       </p>
       <div className="sh-backup__buttons">
         <button type="button" className="btn btn--outline" onClick={() => exportBackup()}>

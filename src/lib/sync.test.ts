@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import fixture from '../../scheda-corrente.json'
 import { parsePlan, type Plan } from '../plan/schema'
-import { buildPlanUrl, fetchPlan, FETCH_TIMEOUT_MS, isNewerPlan, readPlanFile } from './sync'
+import { buildPlanUrl, fetchPlan, FETCH_TIMEOUT_MS, isNewerPlan, readPlanFile, stripTokenParam } from './sync'
 
 const ENDPOINT = 'https://script.google.com/macros/s/ABC123/exec'
 const TOKEN = 'secret-token'
@@ -60,6 +60,21 @@ describe('buildPlanUrl', () => {
     expect(() => buildPlanUrl('script.google.com/macros/s/X/exec', 't')).toThrow(/non è valido/)
     expect(() => buildPlanUrl('ftp://example.com/x', 't')).toThrow(/https/)
     expect(() => buildPlanUrl('https://script.google.com/macros/s/X/dev', 't')).toThrow(/\/exec/)
+  })
+})
+
+describe('stripTokenParam', () => {
+  it('removes a token pasted inside the endpoint, keeping the rest of the query', () => {
+    expect(stripTokenParam(`${ENDPOINT}?token=leaked`)).toBe(ENDPOINT)
+    expect(stripTokenParam(` ${ENDPOINT}?v=2&token=a&token&x=a%20b#f `)).toBe(`${ENDPOINT}?v=2&x=a%20b#f`)
+    expect(stripTokenParam(`${ENDPOINT}?token=leaked`)).not.toContain('leaked')
+  })
+
+  it('leaves anything without a token parameter as typed (trimmed)', () => {
+    expect(stripTokenParam(`  ${ENDPOINT}  `)).toBe(ENDPOINT)
+    expect(stripTokenParam(`${ENDPOINT}?v=2&tokens=1&mytoken=2`)).toBe(`${ENDPOINT}?v=2&tokens=1&mytoken=2`)
+    expect(stripTokenParam('script.google.com/macros/s/X/exec?token=a')).toBe('script.google.com/macros/s/X/exec?token=a')
+    expect(stripTokenParam('')).toBe('')
   })
 })
 
