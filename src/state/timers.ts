@@ -259,6 +259,15 @@ export function clearTimer(id: string): void {
   commit(next)
 }
 
+/** Removes every timer whose id starts with `prefix` (e.g. `${date}#${index}#`: all rows/sides of one exercise). */
+export function clearTimersWithPrefix(prefix: string): void {
+  const ids = Object.keys(timers).filter((id) => id.startsWith(prefix))
+  if (ids.length === 0) return
+  const next: Record<string, TimerState> = { ...timers }
+  for (const id of ids) delete next[id]
+  commit(next)
+}
+
 export function getTimer(id: string): TimerState | null {
   return timers[id] ?? null
 }

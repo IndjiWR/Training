@@ -4,6 +4,7 @@ import { nowISO, TIME_ZONE } from '../lib/date'
 import { fetchPlan, isNewerPlan, readPlanFile, type FetchPlanResult } from '../lib/sync'
 import { setPlan, setPlanMeta } from './actions'
 import { getState, subscribe } from './store'
+import type { SessionLog } from './types'
 import { toast, type Toast } from './ui'
 
 /**
@@ -15,7 +16,7 @@ const STALE_MS = 15 * 60_000
 /** …and never more often than this, so a persistent failure does not refetch on every app switch. */
 const MIN_AUTO_RETRY_MS = 60_000
 /** A started, unfinished session younger than this counts as a workout in progress. */
-const ACTIVE_SESSION_MS = 3 * 60 * 60_000
+export const ACTIVE_SESSION_MS = 3 * 60 * 60_000
 const SETTINGS_HASH = '#/impostazioni'
 
 type FetchFailure = Extract<FetchPlanResult, { ok: false }>
@@ -81,13 +82,24 @@ function subscribeSyncing(listener: () => void): () => void {
   return () => syncingListeners.delete(listener)
 }
 
-function workoutInProgress(): boolean {
-  const now = Date.now()
-  return Object.values(getState().sessions).some((s) => {
-    if (!s.startedAt || s.finishedAt || s.skipped) return false
+/**
+ * Start time (epoch ms) of the most recently started open session — started, not finished, not
+ * skipped — or null when there is none. Pure: a workout is in progress while
+ * `now - openSessionStart(sessions) < ACTIVE_SESSION_MS`.
+ */
+export function openSessionStart(sessions: Record<string, SessionLog>): number | null {
+  let latest: number | null = null
+  for (const s of Object.values(sessions)) {
+    if (!s.startedAt || s.finishedAt || s.skipped) continue
     const started = Date.parse(s.startedAt)
-    return !Number.isNaN(started) && now - started < ACTIVE_SESSION_MS
-  })
+    if (!Number.isNaN(started) && (latest == null || started > latest)) latest = started
+  }
+  return latest
+}
+
+function workoutInProgress(): boolean {
+  const started = openSessionStart(getState().sessions)
+  return started != null && Date.now() - started < ACTIVE_SESSION_MS
 }
 
 /** A remote plan replaces the current one when newer, or when the current one is just the example. */

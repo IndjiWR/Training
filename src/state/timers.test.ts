@@ -3,6 +3,7 @@ import {
   __resetTimersForTests,
   claimOnce,
   clearTimer,
+  clearTimersWithPrefix,
   createCountdown,
   createCountUp,
   currentPhase,
@@ -196,6 +197,15 @@ describe('store API (in memory)', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('clearTimersWithPrefix removes every row/side of one exercise only', () => {
+    for (const id of ['d#3#0', 'd#3#2#dx', 'd#3#2#sx', 'd#30#0', 'd#4#0', 'e#3#0']) startCountUp(id, id, 0, T0)
+    const before = getAllTimers()
+    clearTimersWithPrefix('d#9#')
+    expect(getAllTimers()).toBe(before)
+    clearTimersWithPrefix('d#3#')
+    expect(Object.keys(getAllTimers()).sort()).toEqual(['d#30#0', 'd#4#0', 'e#3#0'])
   })
 
   it('claimOnce fires once per key', () => {

@@ -1,5 +1,5 @@
-import type { Day, Plan } from '../plan/schema'
-import { applyElbow, CHECK_KEY, sessionElbowLevel } from '../lib/elbow'
+import type { Day, Exercise, Plan } from '../plan/schema'
+import { applyElbow, CHECK_KEY, plannedSetCount, sessionElbowLevel } from '../lib/elbow'
 import { nowISO } from '../lib/date'
 import { defaultData, setState } from './store'
 import type {
@@ -40,12 +40,15 @@ function newSession(plan: Plan, day: Day): SessionLog {
   }
 }
 
-/** Planned sets of every exercise of the day for the session's current elbow level. */
+/**
+ * Planned sets of every exercise of the day for the session's current elbow level
+ * (plannedSetCount: hidden/info 0, `sets: null` 1 = the row the card shows).
+ */
 function plannedSets(plan: Plan, day: Day, session: SessionLog): Map<number, number> {
   const level = sessionElbowLevel(session, plan.elbow)
   const map = new Map<number, number>()
   for (const e of applyElbow(day, plan.library, level)) {
-    map.set(e.index, e.hidden || e.ex.kind === 'info' ? 0 : (e.sets ?? 0))
+    map.set(e.index, plannedSetCount(e))
   }
   return map
 }
@@ -67,13 +70,13 @@ function newExerciseLog(plan: Plan, day: Day, index: number, setsPlanned: number
   }
 }
 
-/** Re-syncs setsPlanned of existing exercise logs after an elbow change. */
+/** Re-syncs setsPlanned of existing exercise logs after an elbow/plan change (orphans untouched). */
 function withPlanned(plan: Plan, day: Day, session: SessionLog): SessionLog {
   const planned = plannedSets(plan, day, session)
   let changed = false
   const exercises: Record<string, ExerciseLog> = {}
   for (const [id, log] of Object.entries(session.exercises)) {
-    const p = planned.get(log.index)
+    const p = id === String(log.index) ? planned.get(log.index) : undefined
     if (p !== undefined && p !== log.setsPlanned) {
       exercises[id] = { ...log, setsPlanned: p }
       changed = true
@@ -131,13 +134,14 @@ function stampDone(set: SetLog): SetLog {
   return { ...set, at: set.done ? (set.at ?? nowISO()) : null }
 }
 
+/** Started (the first start is kept). A real start also clears a "saltata" mark: the day is being trained. */
 function startedNow(s: SessionLog): SessionLog {
-  return s.startedAt ? s : { ...s, startedAt: nowISO() }
+  return s.startedAt && !s.skipped ? s : { ...s, startedAt: s.startedAt ?? nowISO(), skipped: false }
 }
 
 /* ───────────────────────── session ───────────────────────── */
 
-/** Marks the session as started (idempotent). */
+/** Marks the session as started (idempotent; un-skips a day marked as skipped). */
 export function startSession(date: string): void {
   mutateSession(date, (s) => startedNow(s))
 }
@@ -158,9 +162,23 @@ export function setElbowPre(date: string, score: number): void {
   })
 }
 
-/** Manual override of the traffic light (null = back to automatic). */
+/**
+ * Manual override of the traffic light (null = back to automatic). Without a score, a colour
+ * settles the check-gomito set (done, no value) and "Automatico" re-opens it.
+ */
 export function setElbowOverride(date: string, level: ElbowLevel | null): void {
-  mutateSession(date, (s, { plan, day }) => withPlanned(plan, day, { ...s, elbowOverride: level }))
+  mutateSession(date, (s, { plan, day }) => {
+    let next: SessionLog = { ...s, elbowOverride: level }
+    const checkIndex = day.exercises.findIndex((e) => e.key === CHECK_KEY)
+    const id = String(checkIndex)
+    if (checkIndex >= 0 && s.elbowPre == null && (level != null || next.exercises[id])) {
+      const log = next.exercises[id] ?? newExerciseLog(plan, day, checkIndex, 1)
+      const sets = padSets(log.sets, 1)
+      sets[0] = stampDone({ ...sets[0], done: level != null, value: null })
+      next = { ...next, exercises: { ...next.exercises, [id]: { ...log, sets } } }
+    }
+    return withPlanned(plan, day, next)
+  })
 }
 
 export function updateSessionMeta(
@@ -290,17 +308,119 @@ export function setPin(key: string, url: string | null): void {
   })
 }
 
+/* ───────────────────────── plan replacement ───────────────────────── */
+
+/** Id prefix of exercise logs that match no exercise of their plan day (kept for history). */
+export const ORPHAN_PREFIX = 'orphan:'
+
+function sameExercise(log: ExerciseLog, ex: Exercise | undefined): boolean {
+  return ex != null && log.key === ex.key && log.kind === ex.kind
+}
+
+/** Weight of one match over any total index displacement (indexes are small). */
+const MATCH = 1_000_000
+
+/**
+ * Re-aligns the logs of `session` onto `day` after a plan replacement, so that
+ * session.exercises[String(i)] belongs to day.exercises[i] again (every index-based reader and
+ * writer relies on it). Logs match exercises by key+kind: first in order (most matches, then the
+ * least index displacement), then any leftover to the nearest free exercise with the same key+kind
+ * (reordered plan). A log matching nothing is kept under "orphan:<id>": no card reads it, history
+ * (latestResult, summary) still does. Returns `session` itself when nothing moves.
+ */
+export function remapSession(session: SessionLog, day: Day): SessionLog {
+  const logs = Object.entries(session.exercises)
+    .filter(([, log]) => log != null)
+    .sort(([, a], [, b]) => a.index - b.index)
+  const exs = day.exercises
+  const n = logs.length
+  const m = exs.length
+
+  // best[a][b]: best ordered alignment of logs[a..] with exs[b..] (matches x MATCH - displacement).
+  const best = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  const matchScore = (a: number, b: number): number =>
+    sameExercise(logs[a][1], exs[b])
+      ? best[a + 1][b + 1] + MATCH - Math.abs(logs[a][1].index - b)
+      : Number.NEGATIVE_INFINITY
+  for (let a = n - 1; a >= 0; a--) {
+    for (let b = m - 1; b >= 0; b--) best[a][b] = Math.max(best[a + 1][b], best[a][b + 1], matchScore(a, b))
+  }
+  const target = new Array<number>(n).fill(-1)
+  const used = new Set<number>()
+  for (let a = 0, b = 0; a < n && b < m; ) {
+    if (best[a][b] === matchScore(a, b)) {
+      target[a] = b
+      used.add(b)
+      a++
+      b++
+    } else if (best[a][b] === best[a + 1][b]) a++
+    else b++
+  }
+  // Leftovers (exercises swapped by the new plan): nearest free exercise with the same key+kind.
+  for (let a = 0; a < n; a++) {
+    if (target[a] >= 0) continue
+    const log = logs[a][1]
+    let j = -1
+    exs.forEach((ex, i) => {
+      if (used.has(i) || !sameExercise(log, ex)) return
+      if (j < 0 || Math.abs(i - log.index) < Math.abs(j - log.index)) j = i
+    })
+    if (j >= 0) {
+      target[a] = j
+      used.add(j)
+    }
+  }
+
+  const exercises: Record<string, ExerciseLog> = {}
+  const taken = new Set(logs.map(([id]) => id).filter((id) => id.startsWith(ORPHAN_PREFIX)))
+  let changed = false
+  logs.forEach(([id, log], a) => {
+    const j = target[a]
+    if (j >= 0) {
+      exercises[String(j)] = j === log.index ? log : { ...log, index: j }
+      if (id !== String(j) || j !== log.index) changed = true
+    } else if (id.startsWith(ORPHAN_PREFIX)) {
+      exercises[id] = log
+    } else {
+      const base = `${ORPHAN_PREFIX}${id}`
+      let orphanId = base
+      for (let k = 2; taken.has(orphanId); k++) orphanId = `${base}~${k}`
+      taken.add(orphanId)
+      exercises[orphanId] = log
+      changed = true
+    }
+  })
+  return changed ? { ...session, exercises } : session
+}
+
+/** Re-aligns the sessions on the dates `plan` covers (remapSession) and re-syncs their setsPlanned. */
+function alignSessions(plan: Plan, sessions: Record<string, SessionLog>): Record<string, SessionLog> {
+  let out = sessions
+  const seen = new Set<string>()
+  for (const day of plan.days) {
+    // findDay() semantics: the first day of a date wins.
+    if (seen.has(day.date)) continue
+    seen.add(day.date)
+    const s = Object.hasOwn(sessions, day.date) ? sessions[day.date] : undefined
+    if (!s?.exercises) continue
+    const next = withPlanned(plan, day, remapSession(s, day))
+    if (next !== s) out = { ...out, [day.date]: next }
+  }
+  return out
+}
+
 /* ───────────────────────── settings & plan ───────────────────────── */
 
 export function updateSettings(patch: Partial<Settings>): void {
   setState((state) => ({ ...state, settings: { ...state.settings, ...patch } }))
 }
 
-/** Stores a validated plan as the current one. */
+/** Stores a validated plan as the current one; logs on the dates it covers follow their exercises. */
 export function setPlan(plan: Plan, source: PlanSource): void {
   setState((state) => ({
     ...state,
     plan,
+    sessions: alignSessions(plan, state.sessions),
     planMeta: { ...state.planMeta, source, receivedAt: nowISO(), lastError: null },
   }))
 }
@@ -311,9 +431,9 @@ export function setPlanMeta(patch: Partial<PlanMeta>): void {
 
 /* ───────────────────────── whole data ───────────────────────── */
 
-/** Replaces everything (backup import). */
+/** Replaces everything (backup import). Logs are re-aligned onto the imported plan. */
 export function replaceAllData(data: AppData): void {
-  setState(() => data)
+  setState(() => (data.plan ? { ...data, sessions: alignSessions(data.plan, data.sessions) } : data))
 }
 
 /** Wipes logs, plan and pins. Keeps endpoint/token/preferences when keepSettings. */
