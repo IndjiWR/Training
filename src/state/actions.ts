@@ -1,9 +1,11 @@
 import type { Day, Exercise, Plan } from '../plan/schema'
+import { nextStamp, same } from '../lib/dataSync'
 import { applyElbow, CHECK_KEY, plannedSetCount, sessionElbowLevel } from '../lib/elbow'
 import { nowISO } from '../lib/date'
-import { defaultData, setState } from './store'
+import { defaultData, defaultSync, setState } from './store'
 import type {
   AppData,
+  DataSync,
   DayLog,
   ElbowLevel,
   ExerciseLog,
@@ -14,7 +16,9 @@ import type {
   SetLog,
   Settings,
   SideLog,
+  SyncKind,
 } from './types'
+import { SYNC_KINDS } from './types'
 
 /* ───────────────────────── helpers ───────────────────────── */
 
@@ -89,6 +93,27 @@ function withPlanned(plan: Plan, day: Day, session: SessionLog): SessionLog {
 
 type Ctx = { plan: Plan; day: Day }
 
+/* Every user change stamps the record's `updatedAt` and marks its key as pending for the next
+   upload (a pending key whose record is gone is a deletion). The first change of a synced record
+   keeps the version it replaces as `base`: Drive and this device are merged against it. */
+
+let lastMark = 0
+
+/** Change marks: increasing, so a change made during an upload is never mistaken for the uploaded one. */
+function newMark(): number {
+  lastMark = Math.max(Date.now(), lastMark + 1)
+  return lastMark
+}
+
+function touched(sync: DataSync, kind: SyncKind, key: string, previous: unknown): DataSync {
+  const first = !Object.hasOwn(sync.pending[kind], key)
+  return {
+    ...sync,
+    pending: { ...sync.pending, [kind]: { ...sync.pending[kind], [key]: newMark() } },
+    base: first ? { ...sync.base, [kind]: { ...sync.base[kind], [key]: previous ?? null } } : sync.base,
+  }
+}
+
 /** Applies `fn` to the session of `date` (created on demand). No-op without plan/day. */
 function mutateSession(date: string, fn: (s: SessionLog, ctx: Ctx) => SessionLog): void {
   setState((state) => {
@@ -100,7 +125,11 @@ function mutateSession(date: string, fn: (s: SessionLog, ctx: Ctx) => SessionLog
     const current = existing ?? newSession(plan, day)
     const next = fn(current, { plan, day })
     if (existing && next === existing) return state
-    return { ...state, sessions: { ...state.sessions, [date]: next } }
+    return {
+      ...state,
+      sessions: { ...state.sessions, [date]: { ...next, updatedAt: nextStamp(existing) } },
+      sync: touched(state.sync, 'sessions', date, existing),
+    }
   })
 }
 
@@ -208,9 +237,10 @@ export function markSkipped(date: string, skipped: boolean): void {
 export function deleteSession(date: string): void {
   setState((state) => {
     if (!state.sessions[date]) return state
+    const previous = state.sessions[date]
     const sessions = { ...state.sessions }
     delete sessions[date]
-    return { ...state, sessions }
+    return { ...state, sessions, sync: touched(state.sync, 'sessions', date, previous) }
   })
 }
 
@@ -285,10 +315,15 @@ export function resetExercise(date: string, index: number): void {
 
 /* ───────────────────────── day log ───────────────────────── */
 
-export function updateDayLog(date: string, patch: Partial<Omit<DayLog, 'date'>>): void {
+export function updateDayLog(date: string, patch: Partial<Omit<DayLog, 'date' | 'updatedAt'>>): void {
   setState((state) => {
-    const prev: DayLog = state.days[date] ?? { date, weightKg: null, elbowNextMorning: null, sleepH: null }
-    return { ...state, days: { ...state.days, [date]: { ...prev, ...patch, date } } }
+    const existing = state.days[date]
+    const prev: DayLog = existing ?? { date, weightKg: null, elbowNextMorning: null, sleepH: null }
+    return {
+      ...state,
+      days: { ...state.days, [date]: { ...prev, ...patch, date, updatedAt: nextStamp(existing) } },
+      sync: touched(state.sync, 'days', date, existing),
+    }
   })
 }
 
@@ -296,15 +331,16 @@ export function updateDayLog(date: string, patch: Partial<Omit<DayLog, 'date'>>)
 
 export function setPin(key: string, url: string | null): void {
   setState((state) => {
+    const existing = Object.hasOwn(state.pins, key) ? state.pins[key] : undefined
     if (url && url.trim()) {
-      const pin: MediaPin = { url: url.trim(), addedAt: nowISO() }
+      const pin: MediaPin = { url: url.trim(), addedAt: nowISO(), updatedAt: nextStamp(existing) }
       // Computed key in a literal always defines an own property (safe even for "__proto__").
-      return { ...state, pins: { ...state.pins, [key]: pin } }
+      return { ...state, pins: { ...state.pins, [key]: pin }, sync: touched(state.sync, 'pins', key, existing) }
     }
-    if (!Object.hasOwn(state.pins, key)) return state
+    if (!existing) return state
     const pins = { ...state.pins }
     delete pins[key]
-    return { ...state, pins }
+    return { ...state, pins, sync: touched(state.sync, 'pins', key, existing) }
   })
 }
 
@@ -393,8 +429,11 @@ export function remapSession(session: SessionLog, day: Day): SessionLog {
   return changed ? { ...session, exercises } : session
 }
 
-/** Re-aligns the sessions on the dates `plan` covers (remapSession) and re-syncs their setsPlanned. */
-function alignSessions(plan: Plan, sessions: Record<string, SessionLog>): Record<string, SessionLog> {
+/**
+ * Re-aligns the sessions on the dates `plan` covers (remapSession) and re-syncs their setsPlanned.
+ * Not a user change: `updatedAt` is left alone (also used on sessions downloaded from Drive).
+ */
+export function alignSessions(plan: Plan, sessions: Record<string, SessionLog>): Record<string, SessionLog> {
   let out = sessions
   const seen = new Set<string>()
   for (const day of plan.days) {
@@ -412,7 +451,18 @@ function alignSessions(plan: Plan, sessions: Record<string, SessionLog>): Record
 /* ───────────────────────── settings & plan ───────────────────────── */
 
 export function updateSettings(patch: Partial<Settings>): void {
-  setState((state) => ({ ...state, settings: { ...state.settings, ...patch } }))
+  setState((state) => {
+    const settings = { ...state.settings, ...patch }
+    // Another link: replies of the previous one are ignored. Nothing else changes: a new deployment
+    // of the same script reaches the same Drive file, and another file answers with another
+    // identity (the data is then merged with it).
+    const relinked = settings.endpoint.trim() !== state.settings.endpoint.trim()
+    return {
+      ...state,
+      settings,
+      sync: relinked ? { ...state.sync, generation: state.sync.generation + 1 } : state.sync,
+    }
+  })
 }
 
 /** Stores a validated plan as the current one; logs on the dates it covers follow their exercises. */
@@ -431,15 +481,70 @@ export function setPlanMeta(patch: Partial<PlanMeta>): void {
 
 /* ───────────────────────── whole data ───────────────────────── */
 
-/** Replaces everything (backup import). Logs are re-aligned onto the imported plan. */
+/**
+ * Replaces everything (backup import). Logs are re-aligned onto the imported plan. Every record
+ * that differs (deletions included) becomes a local change, like any edit: with saving on Drive
+ * the backup replaces the data on Drive too (on a device never synced, it is merged with Drive at
+ * the first sync). A sync reply already on its way is ignored (new generation).
+ */
 export function replaceAllData(data: AppData): void {
-  setState(() => (data.plan ? { ...data, sessions: alignSessions(data.plan, data.sessions) } : data))
+  setState((state) => {
+    const sessions = data.plan ? alignSessions(data.plan, data.sessions) : data.sessions
+    const next: AppData = { ...data, sessions, sync: state.sync }
+
+    let sync: DataSync = { ...state.sync, generation: state.sync.generation + 1 }
+    const changed = { sessions: { ...next.sessions }, days: { ...next.days }, pins: { ...next.pins } } as Record<
+      SyncKind,
+      Record<string, { updatedAt?: number }>
+    >
+    for (const kind of SYNC_KINDS) {
+      const before = state[kind] as Record<string, { updatedAt?: number }>
+      const after = changed[kind]
+      for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
+        const old = Object.hasOwn(before, key) ? before[key] : undefined
+        const imported = Object.hasOwn(after, key) ? after[key] : undefined
+        if (same(old, imported)) continue
+        if (imported) after[key] = { ...imported, updatedAt: nextStamp(old) }
+        sync = touched(sync, kind, key, old)
+      }
+    }
+    return {
+      ...next,
+      sessions: changed.sessions as AppData['sessions'],
+      days: changed.days as AppData['days'],
+      pins: changed.pins as AppData['pins'],
+      sync,
+    }
+  })
 }
 
-/** Wipes logs, plan and pins. Keeps endpoint/token/preferences when keepSettings. */
+/**
+ * Wipes logs, plan and pins on this device. Keeps endpoint/token/preferences when keepSettings.
+ * The copy on Drive is not touched: with sync on, the next sync downloads it again.
+ */
 export function clearAllData(keepSettings = true): void {
   setState((state) => {
     const fresh = defaultData()
-    return keepSettings ? { ...fresh, settings: state.settings } : fresh
+    const sync = defaultSync(state.sync.enabled, state.sync.generation + 1)
+    return keepSettings ? { ...fresh, settings: state.settings, sync } : { ...fresh, sync }
   })
+}
+
+/**
+ * Deletes every log (sessions, diary, pinned media) as user changes: with saving on Drive the
+ * deletions go to Drive and to the other devices. Plan, settings and link stay.
+ */
+export function deleteAllLogs(): void {
+  setState((state) => {
+    let sync = state.sync
+    for (const kind of SYNC_KINDS) {
+      for (const [key, rec] of Object.entries(state[kind])) sync = touched(sync, kind, key, rec)
+    }
+    return sync === state.sync ? state : { ...state, sessions: {}, days: {}, pins: {}, sync }
+  })
+}
+
+/** Turns the saving on Google Drive on or off for this device. */
+export function setSyncEnabled(enabled: boolean): void {
+  setState((state) => (state.sync.enabled === enabled ? state : { ...state, sync: { ...state.sync, enabled } }))
 }

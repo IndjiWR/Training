@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { parsePlan } from '../plan/schema'
-import type { AppData, Settings } from './types'
+import type { AppData, DataSync, Settings } from './types'
 
 /**
  * Single persisted store (localStorage). Updates are immutable: always return a new
@@ -18,6 +18,28 @@ export const DEFAULT_SETTINGS: Settings = {
   vibration: true,
 }
 
+/**
+ * Not synced with any Drive file: the next sync downloads everything and merges every local record
+ * with it (nothing overwritten). `generation` continues from the previous state.
+ */
+export function defaultSync(enabled = true, generation = 0): DataSync {
+  return {
+    enabled,
+    epoch: null,
+    rev: 0,
+    uploadAll: true,
+    pending: { sessions: {}, days: {}, pins: {} },
+    base: { sessions: {}, days: {}, pins: {} },
+    sent: { sessions: {}, days: {}, pins: {} },
+    refetch: false,
+    generation,
+    unreadable: { sessions: [], days: [], pins: [] },
+    unreadableBuild: null,
+    lastSyncAt: null,
+    lastError: null,
+  }
+}
+
 export function defaultData(): AppData {
   return {
     version: 1,
@@ -27,6 +49,41 @@ export function defaultData(): AppData {
     sessions: {},
     days: {},
     pins: {},
+    sync: defaultSync(),
+  }
+}
+
+const isRecord = (v: unknown): v is Record<string, unknown> => v != null && typeof v === 'object' && !Array.isArray(v)
+const finite = (v: unknown, fallback: number): number => (typeof v === 'number' && Number.isFinite(v) ? v : fallback)
+
+/** Stored sync state with defaults for anything missing or malformed (data saved before sync existed). */
+function normalizeSync(raw: unknown): DataSync {
+  const fresh = defaultSync()
+  if (!isRecord(raw)) return fresh
+  const pending = isRecord(raw.pending) ? raw.pending : {}
+  const base = isRecord(raw.base) ? raw.base : {}
+  const sent = isRecord(raw.sent) ? raw.sent : {}
+  const unreadable = isRecord(raw.unreadable) ? raw.unreadable : {}
+  const marks = (v: unknown): Record<string, number> =>
+    isRecord(v)
+      ? Object.fromEntries(Object.entries(v).filter((e): e is [string, number] => typeof e[1] === 'number'))
+      : {}
+  const bases = (v: unknown): Record<string, unknown> => (isRecord(v) ? { ...v } : {})
+  const keys = (v: unknown): string[] => (Array.isArray(v) ? v.filter((k): k is string => typeof k === 'string') : [])
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : fresh.enabled,
+    epoch: typeof raw.epoch === 'string' ? raw.epoch : null,
+    rev: finite(raw.rev, 0),
+    uploadAll: typeof raw.uploadAll === 'boolean' ? raw.uploadAll : fresh.uploadAll,
+    pending: { sessions: marks(pending.sessions), days: marks(pending.days), pins: marks(pending.pins) },
+    base: { sessions: bases(base.sessions), days: bases(base.days), pins: bases(base.pins) },
+    sent: { sessions: bases(sent.sessions), days: bases(sent.days), pins: bases(sent.pins) },
+    refetch: raw.refetch === true,
+    generation: finite(raw.generation, 0),
+    unreadable: { sessions: keys(unreadable.sessions), days: keys(unreadable.days), pins: keys(unreadable.pins) },
+    unreadableBuild: typeof raw.unreadableBuild === 'string' ? raw.unreadableBuild : null,
+    lastSyncAt: typeof raw.lastSyncAt === 'string' ? raw.lastSyncAt : null,
+    lastError: typeof raw.lastError === 'string' ? raw.lastError : null,
   }
 }
 
@@ -51,6 +108,7 @@ export function normalizeData(raw: unknown): AppData {
     sessions: r.sessions && typeof r.sessions === 'object' ? r.sessions : {},
     days: r.days && typeof r.days === 'object' ? r.days : {},
     pins: r.pins && typeof r.pins === 'object' ? r.pins : {},
+    sync: normalizeSync(r.sync),
   }
   if (r.plan) {
     const parsed = parsePlan(r.plan)

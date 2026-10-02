@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { DAY_TYPES, formatIssues, KINDS, UNITS } from '../plan/schema'
-import { normalizeData } from '../state/store'
+import { defaultSync, normalizeData } from '../state/store'
 import type { AppData } from '../state/types'
 
 export const BACKUP_FORMAT = 'training-backup'
@@ -64,7 +64,7 @@ const ExerciseLogSchema = z.looseObject({
   text: z.string().optional(),
 })
 
-const SessionLogSchema = z.looseObject({
+export const SessionLogSchema = z.looseObject({
   planId: textField,
   dayType: z.enum(DAY_TYPES),
   dayTitle: str,
@@ -82,13 +82,13 @@ const SessionLogSchema = z.looseObject({
     .transform((v) => v ?? {}),
 })
 
-const DayLogSchema = z.looseObject({
+export const DayLogSchema = z.looseObject({
   weightKg: num,
   elbowNextMorning: num,
   sleepH: num,
 })
 
-const MediaPinSchema = z.looseObject({
+export const MediaPinSchema = z.looseObject({
   url: z.string().regex(/^https?:\/\/\S+$/i, 'il link deve iniziare con http:// o https://'),
   addedAt: textField,
 })
@@ -119,13 +119,16 @@ const BackupDataSchema = z.object({
 
 /* ───────────────────────── API ───────────────────────── */
 
-/** Serialises the whole app data (sessions, day logs, plan, pins, settings without endpoint and token). */
+/**
+ * Serialises the whole app data (sessions, day logs, plan, pins, settings without endpoint and
+ * token). The Drive sync state belongs to the device and is exported blank.
+ */
 export function createBackup(data: AppData, exportedAt: string): BackupFile {
   return {
     format: BACKUP_FORMAT,
     version: BACKUP_VERSION,
     exportedAt,
-    data: { ...data, settings: { ...data.settings, endpoint: '', token: '' } },
+    data: { ...data, settings: { ...data.settings, endpoint: '', token: '' }, sync: defaultSync() },
   }
 }
 
