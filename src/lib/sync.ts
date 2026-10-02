@@ -21,6 +21,13 @@ const REQUEST_INIT: RequestInit = { method: 'GET', redirect: 'follow', cache: 'n
 const LOCAL_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$|\.localhost$/i
 const DEPLOY_HINT = 'Nel deploy imposta «Chi può accedere: Chiunque» (Anyone) e usa l’URL che termina con /exec.'
 
+/** The script answered, but with a Google page (no CORS headers) instead of its JSON. */
+export const BLOCKED_HINT =
+  'Apri il collegamento nel browser del computer per vedere il motivo. Di solito, dopo un aggiornamento dello script, manca l’autorizzazione: nell’editor esegui «setup» e consenti l’accesso a Drive. Oppure il deployment non è aperto a «Chiunque», o l’URL è di un deployment archiviato.'
+
+/** How long the check "does the script answer at all?" may take. */
+const PROBE_TIMEOUT_MS = 15_000
+
 function fail(kind: FetchPlanErrorKind, error: string): FetchPlanResult {
   return { ok: false, kind, error }
 }
@@ -151,6 +158,19 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
 }
 
 /**
+ * After a request failed like a network error: did the server answer at all? A Google page
+ * (login, authorization needed, deployment not found) has no CORS headers, so the browser hides
+ * it; a "no-cors" request still resolves (with an opaque response) whenever there is an answer.
+ */
+export async function answersWithoutCors(url: string, fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  try {
+    return (await withTimeout(fetchImpl(url, { ...REQUEST_INIT, mode: 'no-cors' }), PROBE_TIMEOUT_MS)) != null
+  } catch {
+    return false
+  }
+}
+
+/**
  * Plain GET (no custom headers, no body, no credentials: Apps Script cannot answer a CORS
  * preflight; redirects are followed), then JSON parse, {"error":"unauthorized"} detection and
  * zod validation via parsePlan. Never throws: every failure becomes { ok:false, kind, error }
@@ -188,8 +208,9 @@ export async function fetchPlan(
     text = await res.text()
   } catch {
     if (isOffline()) return fail('offline', 'Sei offline: impossibile scaricare la scheda adesso.')
-    // A deploy not open to "Anyone" redirects to the Google login, which has no CORS headers:
-    // the browser reports it exactly like a network failure.
+    if (await answersWithoutCors(url, fetchImpl)) {
+      return fail('http', `Lo script risponde con una pagina di Google invece che con la scheda. ${BLOCKED_HINT}`)
+    }
     return fail('network', `Impossibile contattare lo script: controlla la connessione e l’URL. ${DEPLOY_HINT}`)
   }
 

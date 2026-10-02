@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { AppData, DataSync, SyncKind } from '../state/types'
 import { SYNC_KINDS } from '../state/types'
 import { DayLogSchema, MediaPinSchema, SessionLogSchema } from './backup'
-import { buildPlanUrl, FETCH_TIMEOUT_MS } from './sync'
+import { answersWithoutCors, BLOCKED_HINT, buildPlanUrl, FETCH_TIMEOUT_MS } from './sync'
 
 /**
  * Saving of the logs on Google Drive through the same Apps Script that serves the plan.
@@ -451,6 +451,7 @@ export function applySyncResponse(
 export type SyncErrorKind =
   | 'network'
   | 'unavailable'
+  | 'blocked'
   | 'http'
   | 'unauthorized'
   | 'outdated'
@@ -555,6 +556,15 @@ export async function postSync(
     status = res.status
     text = await res.text()
   } catch {
+    if (timer) clearTimeout(timer)
+    // Not for a flush on the way out (the page is going away) nor after a timeout (it answered late).
+    if (!options.keepalive && !controller?.signal.aborted && (await answersWithoutCors(url, fetchImpl))) {
+      return {
+        ok: false,
+        kind: 'blocked',
+        error: `Lo script risponde con una pagina di Google invece che con i dati. ${BLOCKED_HINT}`,
+      }
+    }
     return { ok: false, kind: 'network', error: 'Impossibile raggiungere Google Drive per salvare i dati.' }
   } finally {
     if (timer) clearTimeout(timer)

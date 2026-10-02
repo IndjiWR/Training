@@ -482,6 +482,20 @@ describe('postSync', () => {
     for (const kind of ['busy', 'unavailable', 'network'] as const) expect(isTemporary(kind)).toBe(true)
   })
 
+  it('a Google page instead of the data (authorization, access) is a lasting problem, not the network', async () => {
+    const blocked = (async (_url: string, init?: RequestInit) => {
+      if (init?.mode === 'no-cors') return new Response(null, { status: 200 })
+      throw new TypeError('Failed to fetch')
+    }) as unknown as typeof fetch
+    const r = await call(blocked)
+    expect(r).toMatchObject({ ok: false, kind: 'blocked' })
+    expect(isTemporary('blocked')).toBe(false)
+    if (!r.ok) expect(r.error).toMatch(/setup/)
+    // Leaving the app: no extra request, retried at the next sync.
+    const flush = await postSync(EXEC, 'tok', { epoch: 'e1', since: 0, changes: emptyRecords() }, { fetchImpl: blocked, keepalive: true })
+    expect(flush).toMatchObject({ ok: false, kind: 'network' })
+  })
+
   it('gives up on a request that never answers', async () => {
     vi.useFakeTimers()
     try {
