@@ -171,6 +171,34 @@ export async function answersWithoutCors(url: string, fetchImpl: typeof fetch = 
 }
 
 /**
+ * After another request to the script failed like a network error: 'json' the deployment answers
+ * a plain GET normally (so it is that other function that fails, e.g. a script without doPost),
+ * 'page' it answers with a Google page, 'none' no answer at all. The GET carries no token.
+ */
+export async function probeScript(endpoint: string, fetchImpl: typeof fetch = fetch): Promise<'json' | 'page' | 'none'> {
+  let url: string
+  try {
+    url = new URL(endpoint.trim()).toString()
+  } catch {
+    return 'none'
+  }
+  try {
+    const res = await withTimeout(fetchImpl(url, { ...REQUEST_INIT }), PROBE_TIMEOUT_MS)
+    if (res) {
+      try {
+        JSON.parse(stripBom(await res.text()))
+        return 'json'
+      } catch {
+        return 'page'
+      }
+    }
+  } catch {
+    /* hidden by CORS, or no connection: tell them apart below */
+  }
+  return (await answersWithoutCors(url, fetchImpl)) ? 'page' : 'none'
+}
+
+/**
  * Plain GET (no custom headers, no body, no credentials: Apps Script cannot answer a CORS
  * preflight; redirects are followed), then JSON parse, {"error":"unauthorized"} detection and
  * zod validation via parsePlan. Never throws: every failure becomes { ok:false, kind, error }

@@ -496,6 +496,21 @@ describe('postSync', () => {
     expect(flush).toMatchObject({ ok: false, kind: 'network' })
   })
 
+  it('a published script without doPost (the plan still downloads) asks to update the script', async () => {
+    const seen: string[] = []
+    const oldScript = (async (url: string, init?: RequestInit) => {
+      seen.push(`${init?.method} ${url.includes('token=') ? 'con token' : 'senza token'}`)
+      // Google's "function not found" page for the POST has no CORS headers; the GET still works.
+      if (init?.method === 'POST') throw new TypeError('Failed to fetch')
+      return new Response(JSON.stringify({ error: 'unauthorized' }))
+    }) as unknown as typeof fetch
+    const r = await call(oldScript)
+    expect(r).toMatchObject({ ok: false, kind: 'outdated' })
+    if (!r.ok) expect(r.error).toMatch(/Hai già lo script\?/)
+    // The check never sends the token again.
+    expect(seen).toEqual(['POST con token', 'GET senza token'])
+  })
+
   it('gives up on a request that never answers', async () => {
     vi.useFakeTimers()
     try {
