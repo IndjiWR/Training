@@ -2,7 +2,7 @@ import { z } from 'zod'
 import type { AppData, DataSync, SyncKind } from '../state/types'
 import { SYNC_KINDS } from '../state/types'
 import { DayLogSchema, MediaPinSchema, SessionLogSchema } from './backup'
-import { answersWithoutCors, BLOCKED_HINT, buildPlanUrl, FETCH_TIMEOUT_MS } from './sync'
+import { BLOCKED_HINT, buildPlanUrl, FETCH_TIMEOUT_MS, probeScript } from './sync'
 
 /**
  * Saving of the logs on Google Drive through the same Apps Script that serves the plan.
@@ -557,12 +557,18 @@ export async function postSync(
     text = await res.text()
   } catch {
     if (timer) clearTimeout(timer)
-    // Not for a flush on the way out (the page is going away) nor after a timeout (it answered late).
-    if (!options.keepalive && !controller?.signal.aborted && (await answersWithoutCors(url, fetchImpl))) {
-      return {
-        ok: false,
-        kind: 'blocked',
-        error: `Lo script risponde con una pagina di Google invece che con i dati. ${BLOCKED_HINT}`,
+    // Why? Not asked for a flush on the way out (the page is going away) nor after a timeout.
+    if (!options.keepalive && !controller?.signal.aborted) {
+      const probe = await probeScript(endpoint, fetchImpl)
+      // The plan request works, saving does not: the published script has no doPost (Google's
+      // "function not found" page has no CORS headers, so it cannot be read).
+      if (probe === 'json') return { ok: false, kind: 'outdated', error: OUTDATED }
+      if (probe === 'page') {
+        return {
+          ok: false,
+          kind: 'blocked',
+          error: `Lo script risponde con una pagina di Google invece che con i dati. ${BLOCKED_HINT}`,
+        }
       }
     }
     return { ok: false, kind: 'network', error: 'Impossibile raggiungere Google Drive per salvare i dati.' }
