@@ -63,6 +63,9 @@ Google Apps Script.
   YouTube; per ogni esercizio puoi fissare un link YouTube (riprodotto incorporato con youtube-nocookie, anche con
   tempo di inizio) o un'immagine/GIF. La pagina **Esercizi** mostra tutta la libreria con i media
   fissati.
+- **Dati su Google Drive**: sessioni, diario e media fissati si salvano da soli nel tuo Drive
+  (`training-dati.json`) e si allineano tra i dispositivi collegati, unendo le modifiche fatte su
+  ciascuno: non dipendono dal browser.
 - **Backup**: esportazione e importazione di tutti i dati in JSON.
 - Interfaccia in italiano, pensata per l'uso con una mano: pulsanti grandi, tema scuro ad alto
   contrasto e tema chiaro «Sole» per la luce diretta.
@@ -242,14 +245,27 @@ errore chiaro (campo per campo) e continua a usare la scheda già salvata.
 
 ## Dati e backup
 
-Sessioni, diario, scheda, media fissati e impostazioni restano nel `localStorage` del browser,
-solo su questo dispositivo: cancellando i dati del sito si perdono.
+L'app lavora sui dati salvati nel dispositivo (`localStorage`), così funziona anche senza rete.
+
+**Su Google Drive.** Con il dispositivo collegato a Drive e **«Salva i dati su Google Drive»**
+attivo (Impostazioni, acceso di default), sessioni, diario e media fissati vengono salvati anche nel
+file `training-dati.json`, nella cartella delle schede, attraverso lo stesso Apps Script. Il
+salvataggio è automatico: pochi secondi dopo ogni modifica, prima che l'app vada in secondo piano,
+all'apertura, ogni pochi minuti mentre l'app è aperta e quando torna la connessione. Più
+dispositivi (iPhone, Mac) restano allineati: se lo stesso giorno cambia su due dispositivi, le
+modifiche si **uniscono** (serie registrate, diario e note di entrambi), senza sovrascrivere nulla.
+Se Safari cancella i dati del sito o cambi telefono, basta incollare di nuovo il collegamento: i dati
+tornano da Drive. Per ripartire da zero: Impostazioni → «Cancella tutti i dati» → «Anche da Google
+Drive». Dettagli in [`apps-script/README.md`](apps-script/README.md#dati-dellapp-su-drive).
+
+**Backup manuale.**
 
 - **Esporta** da **Riepilogo** o **Impostazioni**: scarica `training-backup-AAAA-MM-GG.json` con
   tutti i dati, media fissati compresi (ma senza URL dell'endpoint e token).
 - **Importa** lo stesso file per ripristinare i dati, ad esempio su un altro telefono; il file
   viene validato prima di sostituire i dati attuali. URL dell'endpoint e token restano quelli già
-  configurati sul dispositivo.
+  configurati sul dispositivo. Con il salvataggio su Drive attivo il backup sostituisce i dati anche
+  su Drive e sugli altri dispositivi collegati.
 
 ## Struttura del progetto
 
@@ -262,7 +278,8 @@ solo su questo dispositivo: cancellando i dati del sito si perdono.
 │   ├── lib/              logica pura: date, gomito, risultati e %max, riepilogo, sync, backup,
 │   │                     media, suoni/vibrazione, wake lock
 │   ├── state/            store su localStorage, azioni, stato UI (avvisi, timer di recupero),
-│   │                     sincronizzazione della scheda
+│   │                     sincronizzazione della scheda e dei dati con Drive
+│   ├── test/             Code.gs eseguito contro servizi Google simulati (per i test)
 │   ├── components/       UI condivisa, icone, timer, esercizi, media, shell e navigazione
 │   ├── screens/          Oggi, Esercizi, Riepilogo, Impostazioni
 │   └── styles/           token e primitive CSS
@@ -280,11 +297,13 @@ Test [vitest](https://vitest.dev/) (`src/**/*.test.ts`) che usano `scheda-corren
 fixture. Coprono: logica del semaforo del gomito, trasformazioni giallo/rosso, calcolo `%max`,
 riepilogo settimanale, validazione della scheda, scelta del giorno (fuso `Europe/Rome`),
 sincronizzazione (URL, errori, scheda più recente), collegamento (lettura del link incollato,
-token, `Code.gs` generato con `setup()` eseguito contro servizi Google simulati), backup e parsing
-dei link media. Il workflow di deploy esegue i test prima di ogni build.
+token, `Code.gs` generato con `setup()` eseguito contro servizi Google simulati), salvataggio dei
+dati su Drive (unione delle modifiche, conflitti, file cancellato o ripristinato, `doPost` dello
+script e scenari con più dispositivi contro lo script vero), backup e parsing dei link media. Il workflow di deploy esegue i test prima di ogni build.
 
 ## Privacy
 
 Il repository è **pubblico**. `scheda-corrente.json` è la scheda reale (con alcuni dati personali
 di allenamento), usata come esempio e fixture dei test. Nel repository non ci sono URL
-dell'endpoint, token né dati del diario: restano sul dispositivo.
+dell'endpoint, token né dati del diario: restano sul dispositivo e, se il salvataggio su Drive è
+attivo, nel tuo Google Drive.
