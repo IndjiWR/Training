@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState, type ChangeEvent } from 'react'
 import { parseBackup } from '../../lib/backup'
-import { replaceAllData } from '../../state/actions'
-import { getState } from '../../state/store'
+import { dataSyncActive, importBackup } from '../../state/dataSync'
+import { getState, useAppData } from '../../state/store'
 import type { AppData } from '../../state/types'
 import { stopRest, toast } from '../../state/ui'
 import { IconDownload, IconUpload } from '../icons'
@@ -37,6 +37,8 @@ export function BackupControls() {
   const inputRef = useRef<HTMLInputElement>(null)
   const [pending, setPending] = useState<PendingImport | null>(null)
   const [reading, setReading] = useState(false)
+  const [importing, setImporting] = useState(false)
+  const syncOn = useAppData((s) => dataSyncActive(s))
 
   const onFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const input = e.currentTarget
@@ -74,24 +76,31 @@ export function BackupControls() {
 
   const cancel = useCallback(() => setPending(null), [])
 
-  const confirm = () => {
-    if (!pending) return
+  const confirm = async () => {
+    if (!pending || importing) return
     const current = getState().settings
     const { data } = pending
     // The device keeps its own connection when the backup carries none (new backups never do;
     // an older one may hold the URL, even with "?token=…" inside: never store that in the endpoint).
     const imported = splitEndpointToken(data.settings.endpoint)
-    replaceAllData({
-      ...data,
-      settings: {
-        ...data.settings,
-        endpoint: imported.endpoint || current.endpoint,
-        token: data.settings.token || current.token || imported.token || '',
-      },
-    })
+    setImporting(true)
+    try {
+      await importBackup({
+        ...data,
+        settings: {
+          ...data.settings,
+          endpoint: imported.endpoint || current.endpoint,
+          token: data.settings.token || current.token || imported.token || '',
+        },
+      })
+    } finally {
+      setImporting(false)
+    }
     stopRest()
     setPending(null)
-    toast('Backup importato: dati sostituiti.', { tone: 'success' })
+    toast(syncOn ? 'Backup importato: dati sostituiti, anche su Google Drive.' : 'Backup importato: dati sostituiti.', {
+      tone: 'success',
+    })
   }
 
   const when = pending?.exportedAt ? formatDateTime(pending.exportedAt) : null
@@ -138,15 +147,22 @@ export function BackupControls() {
       <ConfirmSheet
         open={pending !== null}
         title="Importare il backup?"
-        confirmLabel="Sostituisci i dati"
+        confirmLabel={importing ? 'Importo…' : 'Sostituisci i dati'}
         tone="danger"
-        onConfirm={confirm}
+        busy={importing}
+        onConfirm={() => void confirm()}
         onCancel={cancel}
       >
         <p>
-          Sostituire tutti i dati di questo dispositivo con il backup{when ? ` del ${when}` : ''}? (sessioni,
-          diario, scheda, media fissati)
+          Sostituire tutti i dati {syncOn ? '' : 'di questo dispositivo '}con il backup{when ? ` del ${when}` : ''}?
+          (sessioni, diario, scheda, media fissati)
         </p>
+        {syncOn && (
+          <p className="small">
+            Il salvataggio su Google Drive è attivo: il backup sostituisce i dati anche su Drive e sugli altri
+            dispositivi collegati. Le modifiche non ancora salvate su un altro dispositivo restano lì.
+          </p>
+        )}
         {pending && (
           <div className="card sh-backup__summary">
             <p className="small">
@@ -159,9 +175,10 @@ export function BackupControls() {
           </div>
         )}
         <p className="banner banner--warn small">
-          I dati attuali di questo dispositivo andranno persi. Se ti servono, esporta prima un backup.
+          I dati attuali {syncOn ? '' : 'di questo dispositivo '}andranno persi. Se ti servono, esporta prima un
+          backup.
         </p>
-        <button type="button" className="btn btn--ghost btn--block" onClick={() => exportBackup()}>
+        <button type="button" className="btn btn--ghost btn--block" disabled={importing} onClick={() => exportBackup()}>
           <IconDownload />
           Esporta prima i dati attuali
         </button>

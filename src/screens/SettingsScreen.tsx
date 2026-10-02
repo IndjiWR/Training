@@ -20,7 +20,17 @@ import { formatDateTime, formatDateTimeAgo } from '../components/shell/datetime'
 import { splitEndpointToken } from '../components/shell/endpoint'
 import { useOnline } from '../components/shell/online'
 import { alertEnd, unlockAudio } from '../lib/feedback'
-import { clearAllData, updateSettings } from '../state/actions'
+import { DATA_FILE_NAME } from '../lib/dataSync'
+import { setSyncEnabled, updateSettings } from '../state/actions'
+import {
+  clearThisDevice,
+  dataSyncActive,
+  deleteLogsEverywhere,
+  pendingCount,
+  syncData,
+  unreadableCount,
+  useDataSyncing,
+} from '../state/dataSync'
 import { importPlanFile, loadExamplePlan, refreshPlan, useSyncing } from '../state/planSync'
 import { getState, lastPersistFailed, useAppData } from '../state/store'
 import type { PlanSource, ThemeName } from '../state/types'
@@ -319,6 +329,7 @@ function DriveSection() {
           <p className="small muted">
             La scheda si scarica da sola quando apri l&apos;app e quando torna la connessione.
           </p>
+          <DataSyncPanel />
           <CopyLink endpoint={endpoint} token={token} />
           <PasteLink prominent={false} label="Incolla un nuovo collegamento" />
         </>
@@ -365,6 +376,74 @@ function DriveSection() {
         URL e token restano solo su questo dispositivo: mai nel codice dell&apos;app né nel backup.
       </p>
     </Section>
+  )
+}
+
+/** Saving of the logs on Drive: on/off, status, "Sincronizza ora". */
+function DataSyncPanel() {
+  const enabled = useAppData((s) => s.sync.enabled)
+  const lastSyncAt = useAppData((s) => s.sync.lastSyncAt)
+  const lastError = useAppData((s) => s.sync.lastError)
+  const unreadable = useAppData((s) => unreadableCount(s))
+  const pending = useAppData((s) => pendingCount(s))
+  const syncing = useDataSyncing()
+  const online = useOnline()
+
+  const status = syncing
+    ? lastSyncAt
+      ? 'Sincronizzo con Drive…'
+      : 'Unisco i dati di questo dispositivo con quelli su Drive…'
+    : lastError
+      ? 'Ultimo salvataggio non riuscito'
+      : lastSyncAt
+        ? `✓ Salvati su Drive · ${formatDateTimeAgo(lastSyncAt)}`
+        : 'Non ancora sincronizzati'
+
+  return (
+    <div className="stack-sm">
+      <ToggleRow
+        label="Salva i dati su Google Drive"
+        description={`Sessioni, diario e media fissati vanno nel file ${DATA_FILE_NAME} della cartella delle schede: non dipendono da questo browser e arrivano da soli sugli altri dispositivi collegati.`}
+        pressed={enabled}
+        onToggle={() => setSyncEnabled(!enabled)}
+      />
+      {enabled && (
+        <>
+          <p className="small" role="status">
+            <strong>{status}</strong>
+            {!syncing && pending > 0 && (
+              <span className="muted">
+                {' '}
+                · {plural(pending, 'modifica da salvare', 'modifiche da salvare')}
+              </span>
+            )}
+          </p>
+          {lastError && <p className="banner banner--danger small pre-line">{lastError}</p>}
+          {unreadable > 0 && (
+            <p className="small muted">
+              {plural(unreadable, 'elemento', 'elementi')} su Drive {unreadable === 1 ? 'viene' : 'vengono'} da una
+              versione più recente dell&apos;app: aggiornala per vederli. Finché non la aggiorni, le modifiche a quei
+              giorni restano solo qui.
+            </p>
+          )}
+          <button
+            type="button"
+            className="btn btn--outline btn--block"
+            disabled={syncing || !online}
+            aria-busy={syncing || undefined}
+            onClick={() => void syncData({ manual: true })}
+          >
+            <IconRefresh className={syncing ? 'sh-spin' : undefined} />
+            {syncing ? 'Sincronizzo…' : 'Sincronizza ora'}
+          </button>
+          {!online && (
+            <p className="small muted">
+              Sei offline: le modifiche restano sul telefono e vanno su Drive quando torna la connessione.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   )
 }
 
@@ -650,13 +729,21 @@ function useStoragePersistence(): { supported: boolean; persisted: boolean | nul
   return { supported, persisted, request }
 }
 
+type ClearScope = 'device' | 'everywhere'
+
 function DataSection() {
   const sessions = useAppData((s) => s.sessions)
   const days = useAppData((s) => s.days)
   const pins = useAppData((s) => s.pins)
   const [confirm, setConfirm] = useState(false)
+  const [scope, setScope] = useState<ClearScope>('device')
+  const [busy, setBusy] = useState(false)
   const persistence = useStoragePersistence()
   const writeFailed = lastPersistFailed()
+  const syncOn = useAppData((s) => dataSyncActive(s))
+  const unsaved = useAppData((s) => pendingCount(s))
+  const online = useOnline()
+  const everywhere = syncOn && scope === 'everywhere'
 
   const counts = [
     plural(Object.keys(sessions).length, 'sessione', 'sessioni'),
@@ -666,11 +753,37 @@ function DataSection() {
 
   const cancel = useCallback(() => setConfirm(false), [])
 
-  const clear = () => {
-    clearAllData(true)
+  const clearEverywhere = async () => {
+    setBusy(true)
+    const outcome = await deleteLogsEverywhere()
+    setBusy(false)
+    if (outcome === 'unreachable') {
+      toast('Google Drive non raggiungibile: non ho cancellato nulla. Riprova con la connessione.', {
+        tone: 'error',
+      })
+      return
+    }
+    stopRest()
+    setConfirm(false)
+    toast(
+      outcome === 'done'
+        ? 'Dati cancellati qui e su Google Drive. Gli altri dispositivi li cancellano alla prossima sincronizzazione.'
+        : 'Dati cancellati qui: su Google Drive appena la connessione lo permette.',
+      { tone: 'success', durationMs: 7000 },
+    )
+  }
+
+  const afterClear = () => {
     stopRest()
     setConfirm(false)
     const { endpoint, token } = getState().settings
+    if (syncOn) {
+      // The copy on Drive is untouched: bring it back now.
+      toast('Dati cancellati da questo dispositivo: li riprendo da Google Drive.', { tone: 'success' })
+      void refreshPlan({ manual: false })
+      void syncData()
+      return
+    }
     toast('Dati cancellati. Collegamento e preferenze sono rimasti.', {
       tone: 'success',
       action:
@@ -682,6 +795,25 @@ function DataSection() {
           : undefined,
       durationMs: 7000,
     })
+  }
+
+  const clearDevice = async () => {
+    setBusy(true)
+    const outcome = await clearThisDevice()
+    setBusy(false)
+    if (outcome === 'unsaved') {
+      toast(
+        'Alcune modifiche non sono ancora su Google Drive e andrebbero perse: non ho cancellato nulla. Riprova con la connessione, oppure esporta prima un backup.',
+        { tone: 'error', durationMs: 10_000 },
+      )
+      return
+    }
+    afterClear()
+  }
+
+  const clear = () => {
+    if (everywhere) void clearEverywhere()
+    else void clearDevice()
   }
 
   return (
@@ -711,7 +843,14 @@ function DataSection() {
         </div>
       )}
 
-      <button type="button" className="btn btn--danger btn--block" onClick={() => setConfirm(true)}>
+      <button
+        type="button"
+        className="btn btn--danger btn--block"
+        onClick={() => {
+          setScope('device')
+          setConfirm(true)
+        }}
+      >
         <IconTrash />
         Cancella tutti i dati
       </button>
@@ -719,17 +858,70 @@ function DataSection() {
       <ConfirmSheet
         open={confirm}
         title="Cancellare tutti i dati?"
-        confirmLabel="Cancella tutto"
+        confirmLabel={busy ? 'Cancello…' : everywhere ? 'Cancella ovunque' : syncOn ? 'Cancella da questo dispositivo' : 'Cancella tutto'}
         tone="danger"
+        busy={busy}
         onConfirm={clear}
         onCancel={cancel}
       >
-        <p>
-          Verranno cancellati da questo dispositivo sessioni, diario, scheda e media fissati ({counts}). Restano il
-          collegamento a Google Drive e le preferenze.
-        </p>
+        {syncOn && (
+          <div className="stack-sm">
+            <span className="st-label" id="st-clear-scope">
+              Da dove?
+            </span>
+            <div className="st-chips" role="group" aria-labelledby="st-clear-scope">
+              <button
+                type="button"
+                className="chip st-chip"
+                aria-pressed={scope === 'device'}
+                disabled={busy}
+                onClick={() => setScope('device')}
+              >
+                Solo da questo dispositivo
+              </button>
+              <button
+                type="button"
+                className="chip st-chip"
+                aria-pressed={scope === 'everywhere'}
+                disabled={busy || (!online && scope !== 'everywhere')}
+                onClick={() => setScope('everywhere')}
+              >
+                Anche da Google Drive
+              </button>
+            </div>
+          </div>
+        )}
+        {everywhere ? (
+          <>
+            <p>
+              Sessioni, diario e media fissati ({counts}) verranno cancellati da questo dispositivo, dal file{' '}
+              {DATA_FILE_NAME} su Google Drive e dagli altri dispositivi collegati alla loro prossima sincronizzazione.
+              Restano la scheda, il collegamento e le preferenze.
+            </p>
+            <p className="small muted">
+              Le modifiche fatte su un altro dispositivo e non ancora salvate su Drive restano lì.
+            </p>
+            {!online && <p className="small">Sei offline: per cancellare anche da Drive serve la connessione.</p>}
+          </>
+        ) : (
+          <>
+            <p>
+              Verranno cancellati da questo dispositivo sessioni, diario, scheda e media fissati ({counts}). Restano il
+              collegamento a Google Drive e le preferenze.
+            </p>
+            {syncOn && (
+              <p className="small">
+                {unsaved > 0
+                  ? `Prima salvo su Google Drive ${unsaved === 1 ? 'la modifica non ancora salvata' : `le ${unsaved} modifiche non ancora salvate`}. `
+                  : ''}
+                La copia su Google Drive non viene toccata: subito dopo i dati tornano su questo dispositivo (utile se
+                qui qualcosa non torna). Per ripartire da zero scegli «Anche da Google Drive».
+              </p>
+            )}
+          </>
+        )}
         <p className="banner banner--warn small">Non si può annullare. Se vuoi conservarli, esporta prima un backup.</p>
-        <button type="button" className="btn btn--ghost btn--block" onClick={() => exportBackup()}>
+        <button type="button" className="btn btn--ghost btn--block" disabled={busy} onClick={() => exportBackup()}>
           Esporta prima un backup
         </button>
       </ConfirmSheet>
@@ -756,9 +948,9 @@ function InfoSection() {
         Scheda settimanale di calisthenics al parco: timer, contatori e diario. Funziona anche offline.
       </p>
       <p className="small">
-        <strong>Dove sono i dati:</strong> tutto (sessioni, diario, scheda, media fissati, impostazioni) resta in
-        questo browser, su questo dispositivo. Nessun account e nessun server: la rete serve solo per scaricare la
-        scheda da Google Drive e per i video.
+        <strong>Dove sono i dati:</strong> sul dispositivo, così l&apos;app funziona anche offline. Con Google Drive
+        collegato e «Salva i dati su Google Drive» attivo, sessioni, diario e media fissati sono anche nel file{' '}
+        {DATA_FILE_NAME} sul tuo Drive. Nessun altro server: la rete serve solo per Drive e per i video.
       </p>
       <p className="small muted">
         {installed
