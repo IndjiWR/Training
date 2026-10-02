@@ -2,6 +2,7 @@ import { useId, useState, type ReactNode } from 'react'
 import codeGs from '../../../apps-script/Code.gs?raw'
 import manifestJson from '../../../apps-script/appsscript.json?raw'
 import { copyText } from '../../lib/clipboard'
+import { DATA_FILE_NAME } from '../../lib/dataSync'
 import { buildConnectionLink, DEFAULT_FOLDER_ID, extractFolderId, generateToken, scriptWithSetup } from '../../lib/connection'
 import { stripTokenParam } from '../../lib/sync'
 import { connectDrive, useSyncing } from '../../state/planSync'
@@ -69,20 +70,22 @@ export function SetupGuide() {
   const [folderText, setFolderText] = useState(DEFAULT_FOLDER_ID)
   const [url, setUrl] = useState('')
   const [urlError, setUrlError] = useState<string | null>(null)
-  const [copied, setCopied] = useState({ code: false, manifest: false })
+  const [copied, setCopied] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const folderId = extractFolderId(folderText)
   const linked = savedEndpoint.trim() !== '' && savedToken.trim() === token
 
-  const copy = async (what: 'code' | 'manifest') => {
-    if (what === 'code' && !folderId) return
-    const text = what === 'code' ? scriptWithSetup(codeGs, folderId ?? '', token) : manifestJson
-    const ok = await copyText(text)
-    if (ok) setCopied((c) => ({ ...c, [what]: true }))
-    toast(ok ? (what === 'code' ? 'Codice copiato.' : 'Manifest copiato.') : 'Copia non riuscita: riprova.', {
-      tone: ok ? 'success' : 'error',
-    })
+  const copyCode = async () => {
+    if (!folderId) return
+    const ok = await copyText(scriptWithSetup(codeGs, folderId, token))
+    if (ok) setCopied(true)
+    toast(ok ? 'Codice copiato.' : 'Copia non riuscita: riprova.', { tone: ok ? 'success' : 'error' })
+  }
+
+  const copyManifest = async () => {
+    const ok = await copyText(manifestJson)
+    toast(ok ? 'Manifest copiato.' : 'Copia non riuscita: riprova.', { tone: ok ? 'success' : 'error' })
   }
 
   const saveAndTest = async () => {
@@ -133,9 +136,9 @@ export function SetupGuide() {
           )}
         </Step>
 
-        <Step title="Copia il codice dello script" done={copied.code}>
+        <Step title="Copia il codice dello script" done={copied}>
           <p className="small muted">Contiene la cartella e un token generato ora: è un segreto, non condividerlo.</p>
-          <button type="button" className="btn btn--primary" disabled={!folderId} onClick={() => void copy('code')}>
+          <button type="button" className="btn btn--primary" disabled={!folderId} onClick={() => void copyCode()}>
             <IconCopy />
             Copia il codice
           </button>
@@ -152,23 +155,13 @@ export function SetupGuide() {
           </p>
         </Step>
 
-        <Step title="Permesso di sola lettura (consigliato)" done={copied.manifest}>
-          <p className="small">
-            In <strong>Impostazioni progetto</strong> (ingranaggio a sinistra) spunta «Mostra il file manifest
-            "appsscript.json" nell&apos;editor». Torna all&apos;editor, apri <strong>appsscript.json</strong>, incolla al
-            posto di tutto e salva.
-          </p>
-          <button type="button" className="btn btn--outline" onClick={() => void copy('manifest')}>
-            <IconCopy />
-            Copia il manifest
-          </button>
-        </Step>
-
         <Step title="Esegui «setup»">
           <p className="small">
             In alto scegli la funzione <strong>setup</strong> e premi <strong>Esegui</strong>. Autorizza con il tuo
             account; se compare «Google non ha verificato questa app» scegli{' '}
-            <strong>Avanzate → Vai a … (non sicuro)</strong>: lo script è tuo. Nel log deve comparire «Pronto».
+            <strong>Avanzate → Vai a … (non sicuro)</strong>: lo script è tuo. Google chiede l&apos;accesso ai file di
+            Drive: serve per leggere le schede e per salvare i tuoi dati nel file {DATA_FILE_NAME}, nella stessa
+            cartella. Nel log deve comparire «Pronto».
           </p>
         </Step>
 
@@ -227,6 +220,34 @@ export function SetupGuide() {
           )}
         </Step>
       </ol>
+
+      <div className="stack-sm cx-update">
+        <p className="small">
+          <strong>Hai già lo script?</strong> Per aggiornarlo (per esempio per salvare i dati su Drive) non serve un
+          progetto nuovo:
+        </p>
+        <ol className="small cx-update__list">
+          <li>
+            Controlla la cartella al passo 1, premi «Copia il codice» e incollalo nel progetto esistente al posto di
+            tutto. Salva.
+          </li>
+          <li>
+            Se avevi incollato il manifest di sola lettura, apri <strong>appsscript.json</strong> e sostituiscilo con
+            questo.
+            <button type="button" className="btn btn--outline" onClick={() => void copyManifest()}>
+              <IconCopy />
+              Copia il manifest
+            </button>
+          </li>
+          <li>
+            Esegui <strong>setup</strong> e autorizza l&apos;accesso ai file di Drive.
+          </li>
+          <li>
+            <strong>Esegui il deployment → Gestisci deployment</strong> → matita (Modifica) → Versione:{' '}
+            <strong>Nuova versione</strong> → Esegui il deployment. URL e collegamento restano uguali.
+          </li>
+        </ol>
+      </div>
     </div>
   )
 }
