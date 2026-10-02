@@ -95,7 +95,8 @@ export function scriptWithSetup(code: string, folderId: string, token: string): 
   const header = [
     '// ── Configurazione preparata dall’app Training ──',
     '// 1) Salva (Ctrl+S / ⌘S)   2) scegli la funzione «setup» in alto e premi Esegui',
-    '// 3) Esegui il deployment → Nuovo deployment → Applicazione web.',
+    '// 3) Esegui il deployment → Nuovo deployment → Applicazione web (se aggiorni uno script già',
+    '//    pubblicato: Gestisci deployment → Modifica → Nuova versione; l’URL resta lo stesso).',
     '// SETUP_TOKEN è un segreto: non condividere questo codice. Dopo il setup puoi cancellare',
     '// queste due righe: i valori restano salvati nelle Proprietà script.',
     `const SETUP_FOLDER_ID = ${JSON.stringify(folderId)};`,
