@@ -1,12 +1,20 @@
 # Script Google Apps: la scheda da Google Drive
 
-Questo piccolo script è l'unico "backend" di Training. Pubblicato come **applicazione web**, risponde a
-una richiesta `GET …/exec?token=…` restituendo **così com'è** il file più recente della cartella Drive
-che si chiama `scheda-AAAA-MM-GG.json` (ordinato per nome: la data nel nome decide qual è il più nuovo).
+Questo piccolo script è l'unico "backend" di Training. Pubblicato come **applicazione web**:
+
+- risponde a una richiesta `GET …/exec?token=…` restituendo **così com'è** il file più recente della
+  cartella Drive che si chiama `scheda-AAAA-MM-GG.json` (ordinato per nome: la data nel nome decide
+  qual è il più nuovo);
+- risponde a una richiesta `POST …/exec?token=…` salvando i dati dell'app (sessioni, diario, media
+  fissati) nel file **`training-dati.json`** della stessa cartella, e restituendo quelli cambiati
+  dagli altri dispositivi. Così i dati non dipendono dal browser del telefono (vedi
+  [Dati dell'app su Drive](#dati-dellapp-su-drive)).
+
+File:
 
 - [`Code.gs`](./Code.gs): il codice da incollare nell'editor.
-- [`appsscript.json`](./appsscript.json): il manifest (fuso orario, permesso Drive in sola lettura,
-  impostazioni dell'applicazione web).
+- [`appsscript.json`](./appsscript.json): il manifest (fuso orario, permesso Drive, impostazioni
+  dell'applicazione web). È facoltativo: senza, Apps Script ricava gli stessi permessi dal codice.
 
 L'ID della cartella e il token **non sono nel codice**: si impostano nelle *Proprietà script*.
 
@@ -23,16 +31,16 @@ pulsanti per copiare tutto, e il token lo genera l'app (non devi inventarlo né 
 1. **Copia il codice**: è `Code.gs` con in cima due costanti, `SETUP_FOLDER_ID` (la cartella delle
    schede) e `SETUP_TOKEN`. Il token è un segreto: non condividere quel codice.
 2. **Apri script.new** (crea un progetto Apps Script nuovo), seleziona tutto, incolla e salva.
-3. Consigliato: **Copia il manifest** e incollalo in `appsscript.json` (vedi il punto 1.4 più sotto),
-   così lo script chiede solo di *leggere* Drive.
-4. Scegli la funzione **`setup`** e premi **Esegui**: salva `FOLDER_ID` e `TOKEN` nelle *Proprietà
-   script*, chiede l'autorizzazione (come al punto 3 più sotto) e controlla la cartella. Nel log deve
-   comparire «Pronto». Poi puoi cancellare le due righe `SETUP_*`: i valori restano nelle proprietà.
-5. Pubblica come applicazione web (punto 4 più sotto) e incolla nella guida l'URL `/exec`, poi
+3. Scegli la funzione **`setup`** e premi **Esegui**: salva `FOLDER_ID` e `TOKEN` nelle *Proprietà
+   script*, chiede l'autorizzazione (come al punto 3 più sotto), crea `training-dati.json` e controlla
+   la cartella. Nel log deve comparire «Pronto». Poi puoi cancellare le due righe `SETUP_*`: i valori
+   restano nelle proprietà.
+4. Pubblica come applicazione web (punto 4 più sotto) e incolla nella guida l'URL `/exec`, poi
    **Salva e prova**.
-6. **Copia collegamento** (l'URL `/exec?token=…`) e sull'iPhone, nell'app installata, tocca
+5. **Copia collegamento** (l'URL `/exec?token=…`) e sull'iPhone, nell'app installata, tocca
    **«Incolla collegamento»**. Con un Mac e lo stesso ID Apple il collegamento copiato è già negli
-   appunti dell'iPhone; altrimenti mandalo a te stesso (Note, Mail…) e copialo da lì.
+   appunti dell'iPhone; altrimenti mandalo a te stesso (Note, Mail…) e copialo da lì. I dati già
+   salvati su Drive arrivano da soli.
 
 Su iPhone l'app installata nella schermata Home non si apre dai link e ha dati separati da Safari:
 per questo il collegamento si **incolla** nell'app invece di aprirlo.
@@ -45,10 +53,11 @@ Le sezioni seguenti descrivono la **configurazione a mano**, utile anche per cap
    **Nuovo progetto** (un progetto autonomo, non collegato a un Foglio o a un Documento).
 2. In alto a sinistra rinominalo, per esempio `Training – scheda`.
 3. Nel file `Code.gs` cancella tutto e incolla il contenuto di [`Code.gs`](./Code.gs).
-4. Apri **Impostazioni progetto** (icona a ingranaggio nella barra a sinistra) e spunta
-   **Mostra il file manifest "appsscript.json" nell'editor**.
-5. Torna all'**Editor** (icona `< >`), apri `appsscript.json`, sostituisci tutto con il contenuto di
-   [`appsscript.json`](./appsscript.json) e salva (**Ctrl+S**).
+4. Facoltativo: apri **Impostazioni progetto** (icona a ingranaggio nella barra a sinistra), spunta
+   **Mostra il file manifest "appsscript.json" nell'editor**, torna all'**Editor** (icona `< >`), apri
+   `appsscript.json`, sostituisci tutto con il contenuto di [`appsscript.json`](./appsscript.json) e
+   salva (**Ctrl+S**). Se un vecchio manifest chiede solo `drive.readonly`, va aggiornato (o tolto):
+   lo script deve poter scrivere `training-dati.json`.
 
 ## 2. Imposta le proprietà dello script
 
@@ -84,6 +93,8 @@ head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n'; echo
 
 Tieni il token a portata di mano (per esempio nel gestore di password): servirà nell'app.
 Le proprietà si possono cambiare in qualsiasi momento: valgono subito, senza un nuovo deployment.
+Lo script aggiunge da solo la proprietà `DATA_REV` (l'ultima revisione scritta di
+`training-dati.json`, per accorgersi di un file ripristinato): non modificarla.
 
 ## 3. Autorizza e verifica la configurazione
 
@@ -92,13 +103,17 @@ Le proprietà si possono cambiare in qualsiasi momento: valgono subito, senza un
    controllo).
 2. Alla richiesta premi **Rivedi autorizzazioni**, scegli il tuo account. Se compare *"Google non ha
    verificato questa app"* premi **Avanzate → Vai a Training – scheda (non sicuro)**: l'app è la tua.
-   Il permesso richiesto è solo *vedere i file di Google Drive* (sola lettura). Premi **Consenti**.
+   Google chiede di *vedere, modificare, creare ed eliminare i file di Google Drive*: è il permesso
+   minimo con cui uno script può scrivere un file in una cartella che non ha creato lui. Il codice
+   legge solo le schede e scrive solo `training-dati.json`, nella cartella `FOLDER_ID`. Premi
+   **Consenti**.
 3. Nel **Log di esecuzione** dovresti leggere qualcosa come:
 
    ```
    TOKEN: impostato (64 caratteri)
    Cartella: <nome della cartella>
    Scheda servita: scheda-2026-10-04.json (JSON valido, modificata …)
+   Dati dell'app: training-dati.json (0 sessioni, revisione 0)
    ```
 
    Il token non viene mai scritto nel log.
@@ -162,6 +177,47 @@ Le modifiche a `Code.gs` **non** arrivano all'URL `/exec` finché non pubblichi 
 L'URL resta lo stesso. "Nuovo deployment" invece crea un **URL diverso** (andrebbe reinserito nell'app).
 Cambiare `TOKEN` o `FOLDER_ID` nelle proprietà non richiede un nuovo deployment.
 
+**Se avevi pubblicato una versione precedente** (per esempio solo la scheda, in sola lettura), nello
+**stesso progetto**: incolla il nuovo `Code.gs` (dall'app: Impostazioni → «Crea il collegamento dal
+computer» → «Copia il codice», controllando la cartella; la guida ha anche la sezione «Hai già lo
+script?»), sostituisci `appsscript.json` se avevi incollato il manifest di sola lettura, esegui
+**`setup`** per concedere il permesso di scrittura (oppure `checkSetup`, se hai impostato le proprietà
+a mano), poi pubblica una **nuova versione** come sopra. Finché lo script non è aggiornato, l'app lo
+segnala in Impostazioni e continua a funzionare con i dati sul telefono.
+
+## Dati dell'app su Drive
+
+Con il dispositivo collegato e **«Salva i dati su Google Drive»** attivo (Impostazioni, di default
+acceso), l'app salva **sessioni, diario e media fissati** nel file `training-dati.json`, nella stessa
+cartella delle schede. La scheda c'è già su Drive; preferenze, URL e token restano sul dispositivo.
+
+- **Quando**: qualche secondo dopo ogni modifica, prima che l'app passi in secondo piano, all'apertura,
+  ogni pochi minuti mentre è aperta e quando torna la connessione. Senza rete i dati restano sul
+  telefono e partono appena possibile. Se una risposta si perde (rete che cade, app chiusa subito),
+  l'app riconosce poi su Drive il proprio invio e non lo scambia per una modifica fatta altrove.
+- **Più dispositivi** (iPhone, Mac…): lo script accetta una modifica solo dal dispositivo che aveva
+  già visto l'ultima versione di quel giorno (o media); altrimenti gliela rimanda e il dispositivo
+  **unisce** le due versioni e la reinvia. Serie registrate, diario e note di entrambi restano, serie
+  per serie; se lo stesso valore (per esempio il peso, o la stessa serie) è cambiato su due
+  dispositivi, resta la modifica più recente secondo l'orologio dei dispositivi. Le eliminazioni si
+  propagano, ma una modifica non ancora salvata altrove vince sempre su un'eliminazione. Se la scheda
+  è cambiata su un dispositivo solo, le serie si abbinano per esercizio, non per posizione.
+- **Versioni dell'app diverse**: un giorno salvato da una versione più recente dell'app, che questa
+  non sa leggere, non viene mai sovrascritto da qui; dopo l'aggiornamento dell'app viene riscaricato.
+- **Nuovo URL dello stesso script** (un nuovo deployment): incollalo pure, i dati restano allineati.
+  Un collegamento a un altro file unisce invece i dati del dispositivo con quelli del nuovo file.
+- **Telefono nuovo o dati del browser cancellati**: incolla di nuovo il collegamento e i dati tornano
+  da Drive.
+- **Copie precedenti**: Drive conserva le versioni del file (tasto destro → *Gestisci versioni*). Se
+  ripristini una versione precedente o elimini il file, lo script se ne accorge (ricorda l'ultima
+  revisione scritta nella proprietà `DATA_REV`) e dà al file una nuova identità: ogni dispositivo ci
+  rimette allora i dati che ha, senza perdere quelli del file.
+- **Ripartire da zero**: Impostazioni → **«Cancella tutti i dati» → «Anche da Google Drive»**. I dati
+  spariscono da Drive e, alla loro prossima sincronizzazione, dagli altri dispositivi collegati.
+  (Eliminare solo il file su Drive non basta: i dispositivi ci rimetterebbero i loro dati.)
+- Il file non va modificato a mano: se diventa illeggibile lo script non lo sovrascrive e l'app
+  mostra un errore finché non lo ripristini.
+
 ## Risoluzione dei problemi
 
 - **L'app dice che lo script ha risposto con una pagina web, oppure "Impossibile contattare lo
@@ -182,16 +238,28 @@ Cambiare `TOKEN` o `FOLDER_ID` nelle proprietà non richiede un nuovo deployment
   segue lo schema 1. L'app mostra il campo sbagliato e **continua con la scheda salvata**; correggi il
   file su Drive e premi di nuovo *Aggiorna scheda*.
 - **Ho cambiato `Code.gs` ma non cambia nulla**: serve una nuova versione del deployment (vedi sopra).
-- **CORS**: l'app usa di proposito una semplice `GET` **senza intestazioni personalizzate** e senza
-  corpo. Così il browser non invia la richiesta preliminare (*preflight* `OPTIONS`), a cui Apps Script
-  non sa rispondere. Non aggiungere header, `POST` o `Content-Type` alle richieste.
+- **"Lo script su Google Drive è di una versione precedente e non sa ancora salvare i dati"**: il
+  deployment pubblicato non ha il `doPost` di questa versione. Aggiorna lo script come spiegato sopra
+  (stesso progetto, nuova versione del deployment).
+- **"Lo script non ha il permesso di scrivere su Drive"**: lo script è autorizzato in sola lettura
+  (vecchio `appsscript.json`). Aggiorna o togli il manifest, esegui `setup` e pubblica una nuova
+  versione.
+- **"Il file training-dati.json su Drive è danneggiato"**: ripristina una versione precedente da Drive
+  (*Gestisci versioni*) oppure elimina il file: i dispositivi ci rimettono i dati che hanno.
+- **CORS**: l'app usa di proposito richieste **senza intestazioni personalizzate**: una `GET` per la
+  scheda e una `POST` con il corpo in testo semplice per i dati. Così il browser non invia la richiesta
+  preliminare (*preflight* `OPTIONS`), a cui Apps Script non sa rispondere. Non aggiungere header o
+  `Content-Type` alle richieste.
 - **Errori interni**: nell'editor apri **Esecuzioni** (icona a elenco a sinistra) per vedere il
   dettaglio. Lo script non restituisce mai il token o l'ID della cartella nei messaggi di errore.
 
 ## Sicurezza
 
-- Lo script gira con il tuo account ma con il solo permesso **Drive in sola lettura**, e restituisce
-  soltanto l'ultimo file `scheda-*.json` della cartella configurata.
+- Lo script gira con il tuo account. Il permesso Drive gli consentirebbe di toccare tutti i tuoi file,
+  ma il codice legge solo l'ultimo `scheda-*.json` della cartella configurata e scrive solo
+  `training-dati.json` nella stessa cartella. Chi ha il token può leggere la scheda e i tuoi dati di
+  allenamento e salvarne altri: trattalo come una password.
+- Due salvataggi contemporanei non si sovrascrivono: lo script li esegue uno alla volta (`LockService`).
 - Il token viene confrontato tramite hash SHA-256, senza uscite anticipate.
 - Se il token finisce dove non deve: cambia la proprietà `TOKEN` (effetto immediato) e aggiorna l'app.
 - Per spegnere tutto: **Gestisci deployment → Archivia**.
