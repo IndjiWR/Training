@@ -11,6 +11,7 @@ import { UpdatePrompt } from './components/shell/UpdatePrompt'
 import { RestTimerBar } from './components/timers/RestTimerBar'
 import { useWakeLock } from './lib/wakeLock'
 import { TodayScreen } from './screens/TodayScreen'
+import { useDataAutoSync } from './state/dataSync'
 import { usePlanAutoSync } from './state/planSync'
 import { getState, useAppData } from './state/store'
 
@@ -43,6 +44,7 @@ export function App() {
   const prevRoute = useRef(route)
 
   usePlanAutoSync()
+  useDataAutoSync()
 
   // Screen stays on for the whole workout, whatever the tab or the day shown (rest and
   // countdowns keep running off Oggi). Oggi claims the same shared lock for its badge.

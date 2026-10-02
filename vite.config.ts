@@ -16,6 +16,10 @@ const base = normalizeBase(process.env.BASE_PATH)
 
 export default defineConfig({
   base,
+  define: {
+    // Lets a device re-read Drive records it could not parse once the app is updated.
+    __APP_BUILD__: JSON.stringify(new Date().toISOString()),
+  },
   plugins: [
     react(),
     VitePWA({
