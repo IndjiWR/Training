@@ -176,6 +176,22 @@ describe('fetchPlan', () => {
     }
   })
 
+  it('tells a Google page without CORS (login, authorization needed) from a missing connection', async () => {
+    const seen: (RequestMode | undefined)[] = []
+    const impl = (async (_url: string, init?: RequestInit) => {
+      seen.push(init?.mode)
+      if (init?.mode === 'no-cors') return new Response(null, { status: 200 })
+      throw new TypeError('Failed to fetch')
+    }) as typeof fetch
+    const r = await fetchPlan(ENDPOINT, TOKEN, impl)
+    expect(seen).toEqual([undefined, 'no-cors'])
+    expect(r).toMatchObject({ ok: false, kind: 'http' })
+    if (!r.ok) {
+      expect(r.error).toMatch(/pagina di Google/)
+      expect(r.error).toMatch(/setup/)
+    }
+  })
+
   it('maps non-2xx statuses to kind http with the status', async () => {
     const r500 = await fetchPlan(ENDPOINT, TOKEN, mockFetch('oops', 500).impl)
     expect(r500).toMatchObject({ ok: false, kind: 'http' })
