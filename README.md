@@ -12,6 +12,42 @@ Stack: React + Vite + TypeScript + [vite-plugin-pwa](https://vite-pwa-org.netlif
 con [zod](https://zod.dev/). Nessun backend: la scheda arriva da Google Drive tramite un piccolo
 Google Apps Script.
 
+## In English
+
+**Training** is a mobile-first PWA for following a weekly calisthenics plan at the park, offline
+after the first load. It opens on today's workout (Europe/Rome time) and gives every kind of
+exercise its own tracker: rep counters, hold timers showing the target band, countdowns, distance
+sets to tick off, and one value per attempt for max tests. It also runs the rest timers (beep and
+vibration), adapts the day's session to an elbow pain score (green, yellow, red), and keeps a
+training diary and a weekly summary ready to paste into the Sunday check-in. The plan is a JSON
+file validated with zod. It comes from the user's Google Drive through a small Google Apps Script,
+which also stores the logs on Drive so they follow the user across devices; edits made on two
+devices are merged three-way on the device. The app has no backend of its own. The interface is in
+Italian.
+
+Stack: React 19, TypeScript, Vite, vite-plugin-pwa, zod, Vitest; deployed to GitHub Pages by
+GitHub Actions after the tests pass.
+
+**Try it:** open the [app](https://indjiwr.github.io/Training/) and tap **Prova con la scheda di
+esempio** ("try the example plan"). The bundled example week is moved onto the current week.
+
+## Schermate
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/oggi.png" width="180" alt="Oggi: il giorno della scheda, con il check del gomito prima degli esercizi"></td>
+    <td><img src="docs/screenshots/gomito-giallo.png" width="180" alt="Gomito 4/10, giallo: la sessione ridotta e cosa cambia oggi"></td>
+    <td><img src="docs/screenshots/timer-tenuta.png" width="180" alt="Timer di tenuta: secondi grandi e fascia obiettivo 30-45 s"></td>
+    <td><img src="docs/screenshots/riepilogo.png" width="180" alt="Riepilogo settimana: sessioni fatte, parziali e da fare, con il timer di recupero in basso"></td>
+  </tr>
+  <tr>
+    <td align="center">Oggi</td>
+    <td align="center">Sessione adattata al gomito</td>
+    <td align="center">Timer di tenuta</td>
+    <td align="center">Riepilogo settimana</td>
+  </tr>
+</table>
+
 ## Indice
 
 - [Funzionalità](#funzionalità)
@@ -278,6 +314,7 @@ Drive». Dettagli in [`apps-script/README.md`](apps-script/README.md#dati-dellap
 
 ```text
 ├── apps-script/          Code.gs e guida al deploy della Web app
+├── docs/screenshots/     schermate del README
 ├── public/               icone PWA e favicon (generate da scripts/gen-icons.mjs)
 ├── scripts/              gen-icons.mjs: encoder PNG e rasterizzatore in puro Node
 ├── src/
