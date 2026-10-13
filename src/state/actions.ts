@@ -475,6 +475,14 @@ export function setPlan(plan: Plan, source: PlanSource): void {
   }))
 }
 
+/**
+ * Replaces the plan with the same plan on other dates (the example moved onto the current week):
+ * logs follow like in setPlan, while source, receivedAt and the last sync error stay.
+ */
+export function movePlan(plan: Plan): void {
+  setState((state) => ({ ...state, plan, sessions: alignSessions(plan, state.sessions) }))
+}
+
 export function setPlanMeta(patch: Partial<PlanMeta>): void {
   setState((state) => ({ ...state, planMeta: { ...state.planMeta, ...patch } }))
 }

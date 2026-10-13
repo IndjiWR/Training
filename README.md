@@ -82,8 +82,9 @@ npm ci
 npm run dev
 ```
 
-Apri <http://localhost:5173>. Per provare subito senza Apps Script, in **Impostazioni** importa un
-file di scheda, ad esempio `scheda-corrente.json`.
+Apri <http://localhost:5173>. Per provare subito senza Apps Script tocca **Prova con la scheda di
+esempio** (oppure, in **Impostazioni**, **Usa scheda di esempio**); per usare una tua scheda,
+importa il file da **Impostazioni**.
 
 **Sul telefono, nella stessa rete Wi-Fi:**
 
@@ -232,6 +233,12 @@ errore chiaro (campo per campo) e continua a usare la scheda già salvata.
   se non c'è ancora un massimale, si vede il testo di `dose`.
 - **Scheda più recente**: una scheda scaricata sostituisce quella salvata solo se il suo
   `generated_at` è successivo; in quel caso compare un avviso.
+- **Scheda di esempio**: «Prova con la scheda di esempio» (in Impostazioni «Usa scheda di
+  esempio») carica `scheda-corrente.json` spostata di settimane intere sulla settimana corrente:
+  ogni giorno resta nel suo giorno della settimana e con le date si spostano `id`, `start`, `end`,
+  `period`, il prossimo check-in e le date scritte nei testi con il loro giorno («lunedì 5/10»).
+  Finché la scheda salvata è l'esempio, segue la settimana in corso, anche riaprendo l'app
+  settimane dopo. Le schede scaricate da Drive o importate da file non vengono mai spostate.
 
 ## Offline
 
@@ -276,7 +283,7 @@ Drive». Dettagli in [`apps-script/README.md`](apps-script/README.md#dati-dellap
 ├── src/
 │   ├── plan/             schema zod della scheda (contratto + validazione)
 │   ├── lib/              logica pura: date, gomito, risultati e %max, riepilogo, sync, backup,
-│   │                     media, suoni/vibrazione, wake lock
+│   │                     media, scheda di esempio, suoni/vibrazione, wake lock
 │   ├── state/            store su localStorage, azioni, stato UI (avvisi, timer di recupero),
 │   │                     sincronizzazione della scheda e dei dati con Drive
 │   ├── test/             Code.gs eseguito contro servizi Google simulati (per i test)
@@ -295,11 +302,12 @@ npm test
 
 Test [vitest](https://vitest.dev/) (`src/**/*.test.ts`) che usano `scheda-corrente.json` come
 fixture. Coprono: logica del semaforo del gomito, trasformazioni giallo/rosso, calcolo `%max`,
-riepilogo settimanale, validazione della scheda, scelta del giorno (fuso `Europe/Rome`),
-sincronizzazione (URL, errori, scheda più recente), collegamento (lettura del link incollato,
-token, `Code.gs` generato con `setup()` eseguito contro servizi Google simulati), salvataggio dei
-dati su Drive (unione delle modifiche, conflitti, file cancellato o ripristinato, `doPost` dello
-script e scenari con più dispositivi contro lo script vero), backup e parsing dei link media. Il workflow di deploy esegue i test prima di ogni build.
+riepilogo settimanale, validazione della scheda, scelta del giorno (fuso `Europe/Rome`), scheda di
+esempio sempre sulla settimana corrente, sincronizzazione (URL, errori, scheda più recente),
+collegamento (lettura del link incollato, token, `Code.gs` generato con `setup()` eseguito contro
+servizi Google simulati), salvataggio dei dati su Drive (unione delle modifiche, conflitti, file
+cancellato o ripristinato, `doPost` dello script e scenari con più dispositivi contro lo script
+vero), backup e parsing dei link media. Il workflow di deploy esegue i test prima di ogni build.
 
 ## Privacy
 

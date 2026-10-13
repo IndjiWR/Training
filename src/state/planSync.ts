@@ -1,8 +1,9 @@
 import { useEffect, useSyncExternalStore } from 'react'
 import { parsePlan, type Plan } from '../plan/schema'
-import { nowISO, TIME_ZONE } from '../lib/date'
+import { nowISO, TIME_ZONE, todayISO } from '../lib/date'
+import { currentExample } from '../lib/examplePlan'
 import { fetchPlan, isNewerPlan, readPlanFile, type FetchPlanResult } from '../lib/sync'
-import { setPlan, setPlanMeta, updateSettings } from './actions'
+import { movePlan, setPlan, setPlanMeta, updateSettings } from './actions'
 import { getState, subscribe } from './store'
 import type { SessionLog } from './types'
 import { toast, type Toast } from './ui'
@@ -265,7 +266,10 @@ export async function connectDrive(endpoint: string, token: string): Promise<Con
   return meta.lastError === null && meta.lastCheckAt !== before ? 'ok' : 'error'
 }
 
-/** Auto sync: once on app open and on every 'online' event. Call once from the app shell. */
+/**
+ * Auto sync: once on app open and on every 'online' event. A stored example plan is also kept on
+ * the current week. Call once from the app shell.
+ */
 export function usePlanAutoSync(): void {
   useEffect(() => {
     // Module flag: React StrictMode runs effects twice, the app load must fetch once.
@@ -279,6 +283,7 @@ export function usePlanAutoSync(): void {
     }
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') return
+      keepExampleCurrent()
       const last = getState().planMeta.lastCheckAt
       const lastCheck = last ? Date.parse(last) : Number.NaN
       const now = Date.now()
@@ -290,10 +295,17 @@ export function usePlanAutoSync(): void {
       if (pendingPlan) queueMicrotask(applyPendingIfIdle)
     })
 
+    // The example follows the week as "Oggi" follows the day (useToday): every minute, on focus and
+    // when the app comes back to the foreground. A no-op within the same week.
+    const weekTimer = setInterval(keepExampleCurrent, 60_000)
+
     window.addEventListener('online', onOnline)
+    window.addEventListener('focus', keepExampleCurrent)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      clearInterval(weekTimer)
       window.removeEventListener('online', onOnline)
+      window.removeEventListener('focus', keepExampleCurrent)
       document.removeEventListener('visibilitychange', onVisibility)
       unsubscribe()
     }
@@ -331,7 +343,7 @@ export async function importPlanFile(file: File): Promise<boolean> {
   return true
 }
 
-/** Loads the bundled example plan (scheda-corrente.json) — handy to try the app. */
+/** Loads the bundled example plan (scheda-corrente.json) on the current week — handy to try the app. */
 export async function loadExamplePlan(): Promise<void> {
   let json: unknown
   try {
@@ -346,7 +358,20 @@ export async function loadExamplePlan(): Promise<void> {
     toast(shortError(parsed.error), { tone: 'error', durationMs: 10_000 })
     return
   }
+  const example = currentExample(parsed.plan, todayISO())
   pendingPlan = null
-  setPlan(parsed.plan, 'example')
-  toast(`Scheda di esempio caricata: ${planLabel(parsed.plan)}`, { tone: 'success', durationMs: 6000 })
+  setPlan(example, 'example')
+  toast(`Scheda di esempio caricata: ${planLabel(example)}`, { tone: 'success', durationMs: 6000 })
+}
+
+/**
+ * Moves a stored example plan onto the current week, so a demo opened weeks later does not show an
+ * ended plan. Called before the first paint and then by usePlanAutoSync. Plans from Drive or from a
+ * file are never touched.
+ */
+export function keepExampleCurrent(): void {
+  const { plan, planMeta } = getState()
+  if (!plan || planMeta.source !== 'example') return
+  const current = currentExample(plan, todayISO())
+  if (current !== plan) movePlan(current)
 }

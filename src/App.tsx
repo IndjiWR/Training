@@ -12,7 +12,7 @@ import { RestTimerBar } from './components/timers/RestTimerBar'
 import { useWakeLock } from './lib/wakeLock'
 import { TodayScreen } from './screens/TodayScreen'
 import { useDataAutoSync } from './state/dataSync'
-import { usePlanAutoSync } from './state/planSync'
+import { keepExampleCurrent, usePlanAutoSync } from './state/planSync'
 import { getState, useAppData } from './state/store'
 
 // Oggi is in the main bundle (it opens first, at the park); the other screens are separate chunks,
@@ -36,6 +36,8 @@ function preloadScreens(): void {
 
 // Apply the saved theme before the first paint (index.html defaults to dark).
 applyTheme(getState().settings.theme)
+// Same for a saved example plan: moved onto this week before "Oggi" can show it as ended.
+keepExampleCurrent()
 
 export function App() {
   const route = useRoute()
